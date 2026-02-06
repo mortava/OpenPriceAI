@@ -187,7 +187,13 @@ const sanitizePricingResult = (data: unknown): PricingResult | null => {
                 rate: safeNumber(o.rate),
                 points: safeNumber(o.points),
                 apr: safeNumber(o.apr),
-                description: String(o.description || '')
+                description: String(o.description || ''),
+                payment: safeNumber(o.payment),
+                adjustments: Array.isArray(o.adjustments) ? o.adjustments.map((adj: any) => ({
+                  description: String(adj.description || ''),
+                  amount: safeNumber(adj.amount),
+                  rateAdj: safeNumber(adj.rateAdj)
+                })) : []
               }))
           : []
       }))
