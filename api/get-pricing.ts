@@ -352,18 +352,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Filter eligible programs
     let eligiblePrograms = result.programs.filter((p: any) => p.status === 'Eligible')
 
-    // For Primary/Secondary: filter out ALL PPP programs (PPP is Investment only)
+    // For Primary/Secondary: filter out PPP programs (PPP is Investment only)
+    // BUT allow "0MO PPP" / "0 YR PPP" which means NO prepayment penalty
     const isInvestment = formData.occupancyType === 'investment'
     if (!isInvestment) {
-      // Helper to check if program has PPP in name/description
-      const hasPPP = (text: string) => text && text.toUpperCase().includes('PPP')
+      // Helper to check if program has actual PPP (not 0MO/0YR which means no penalty)
+      const hasPPP = (text: string): boolean => {
+        if (!text) return false
+        const upper = text.toUpperCase()
+        // 0MO PPP or 0 YR PPP means NO prepayment penalty - these are OK for all property types
+        if (upper.includes('0MO PPP') || upper.includes('0 YR PPP') || upper.includes('0YR PPP')) {
+          return false
+        }
+        // Check for actual PPP (1YR, 2YR, 3YR, etc.)
+        return upper.includes(' PPP') || upper.includes('YR PPP') || /\d\s*YR\s*PPP/i.test(upper)
+      }
 
       eligiblePrograms = eligiblePrograms.filter((p: any) => {
         // Check program name
         if (hasPPP(p.programName) || hasPPP(p.name)) return false
         // Check description
         if (hasPPP(p.description)) return false
-        // Also filter rate options to remove any PPP descriptions
+        // Also filter rate options to remove any with actual PPP in descriptions
         if (p.rateOptions) {
           p.rateOptions = p.rateOptions.filter((ro: any) => !hasPPP(ro.description))
         }
