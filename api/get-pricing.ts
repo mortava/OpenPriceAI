@@ -378,7 +378,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         allPrograms: result.programs.map((p: any) => ({
           programName: p.programName,
           status: p.status,
+          rateOptionsCount: p.rateOptions?.length || 0,
+          sampleRateDesc: p.rateOptions?.[0]?.description || 'N/A',
         })),
+        debug: {
+          isInvestment,
+          occupancyType: formData.occupancyType,
+          eligibleCount: result.programs.filter((p: any) => p.status === 'Eligible').length,
+        }
       })
     }
 
