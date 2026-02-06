@@ -462,27 +462,12 @@ export default function App() {
     adjustments: Adjustment[]
   }
 
-  // Map prepay period form value to PPP pattern in program name
-  const getPPPPattern = (prepayPeriod: string): string => {
-    const map: Record<string, string> = {
-      '5year': '5 YR PPP',
-      '4year': '4 YR PPP',
-      '3year': '3 YR PPP',
-      '2year': '2 YR PPP',
-      '1year': '1 YR PPP',
-      '0year': '0 YR PPP',
-    }
-    return map[prepayPeriod] || '3 YR PPP'
-  }
-
   // Find the TARGET PRICING - Always prefer 5YR PPP (60MO) for DSCR/Investment (best rates)
   const getTargetPricing = (): TargetPricingOption | null => {
     if (!result?.programs || !Array.isArray(result.programs)) return null
 
     // CRITICAL: PPP is ONLY allowed for Investment properties
     const isPPPAllowed = formData.occupancyType === 'investment'
-    // Always use 5YR PPP for DSCR/Investment - it has the best rates
-    const selectedPPP = isPPPAllowed ? '5 YR PPP' : ''
     let targetOption: TargetPricingOption | null = null
     let closestDistance = Infinity
 
