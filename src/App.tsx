@@ -10,6 +10,7 @@ import { formatCurrency, formatPercent } from '@/lib/utils'
 interface LoanData {
   // Loan Information
   lienPosition: string
+  ltv: string
   lockPeriod: string
   loanType: string
   loanPurpose: string
@@ -133,7 +134,7 @@ type ValidationErrors = Partial<Record<keyof LoanData, string>>
 
 const US_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY']
 
-const REQUIRED_FIELDS: (keyof LoanData)[] = ['loanType', 'loanPurpose', 'loanAmount', 'propertyValue', 'propertyZip', 'propertyState', 'propertyType', 'occupancyType', 'creditScore', 'dti', 'loanTerm']
+const REQUIRED_FIELDS: (keyof LoanData)[] = ['loanPurpose', 'loanAmount', 'propertyValue', 'propertyZip', 'propertyState', 'propertyType', 'occupancyType', 'creditScore', 'dti', 'loanTerm']
 
 const FIELD_LABELS: Record<string, string> = {
   lienPosition: 'Lien Position', loanType: 'Loan Type', loanPurpose: 'Loan Purpose', loanAmount: 'Loan Amount',
@@ -216,6 +217,7 @@ const sanitizePricingResult = (data: unknown): PricingResult | null => {
 
 const DEFAULT_FORM_DATA: LoanData = {
   lienPosition: '1st',
+  ltv: '75',
   lockPeriod: '30',
   loanType: 'nonqm',
   loanPurpose: 'purchase',
@@ -269,13 +271,6 @@ export default function App() {
   const [expandedProgram, setExpandedProgram] = useState<string | null>(null)
   const [showOtherDetails, setShowOtherDetails] = useState(false)
 
-  // Calculate LTV automatically
-  const calculatedLTV = (() => {
-    const loan = Number(formData.loanAmount.replace(/,/g, '')) || 0
-    const prop = Number(formData.propertyValue.replace(/,/g, '')) || 0
-    return prop > 0 ? ((loan / prop) * 100).toFixed(2) : '0.00'
-  })()
-
   // Auto-populate location from ZIP using API lookup
   const [zipLoading, setZipLoading] = useState(false)
   useEffect(() => {
@@ -328,6 +323,34 @@ export default function App() {
   const handleInputChange = (field: keyof LoanData, value: string | boolean) => {
     setFormData(prev => {
       const updated = { ...prev, [field]: value }
+
+      // Bidirectional LTV <-> Loan Amount calculation
+      if (field === 'ltv' && typeof value === 'string') {
+        // LTV changed -> recalculate Loan Amount
+        const ltvVal = parseFloat(value) || 0
+        const propVal = Number(prev.propertyValue.replace(/,/g, '')) || 0
+        if (propVal > 0 && ltvVal > 0) {
+          updated.loanAmount = Math.round(propVal * (ltvVal / 100)).toLocaleString()
+        }
+      }
+      if (field === 'propertyValue' && typeof value === 'string') {
+        // Property Value changed -> keep LTV, recalculate Loan Amount
+        const propVal = Number(value.replace(/,/g, '')) || 0
+        const ltvVal = parseFloat(prev.ltv) || 0
+        if (propVal > 0 && ltvVal > 0) {
+          updated.loanAmount = Math.round(propVal * (ltvVal / 100)).toLocaleString()
+        }
+      }
+      if (field === 'loanAmount' && typeof value === 'string') {
+        // Loan Amount changed -> recalculate LTV
+        const loanAmt = Number(value.replace(/,/g, '')) || 0
+        const propVal = Number(prev.propertyValue.replace(/,/g, '')) || 0
+        if (propVal > 0 && loanAmt > 0) {
+          const newLtv = (loanAmt / propVal) * 100
+          updated.ltv = parseFloat(newLtv.toFixed(2)).toString()
+        }
+      }
+
       // Auto-sync documentationType when loanType changes to DSCR
       if (field === 'loanType' && value === 'dscr') {
         updated.documentationType = 'dscr'
@@ -412,12 +435,14 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          loanType: 'nonqm',
+          product: 'conventional',
           loanAmount: Number(formData.loanAmount.replace(/,/g, '')),
           propertyValue: Number(formData.propertyValue.replace(/,/g, '')),
           cashoutAmount: formData.cashoutAmount ? Number(formData.cashoutAmount.replace(/,/g, '')) : 0,
           creditScore: Number(formData.creditScore),
           dti: Number(formData.dti),
-          ltv: Number(calculatedLTV),
+          ltv: parseFloat(formData.ltv) || 0,
           presentHousingExpense: Number(formData.presentHousingExpense.replace(/,/g, '')),
           grossRent: Number(formData.grossRent.replace(/,/g, '')),
           dscrRatio: calculatedDSCR.range // Use calculated range for API
@@ -597,8 +622,8 @@ export default function App() {
                   {/* LOAN INFORMATION SECTION */}
                   <div className="border-b pb-4">
                     <h3 className="text-sm font-semibold text-gray-700 mb-4 uppercase tracking-wide">Loan Information</h3>
-                    {/* LINE 1: Lien Position, Lock Period, Loan Type, Loan Purpose, Term */}
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    {/* LINE 1: Lien Position, Lock Period, Loan Purpose, Term */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="lienPosition">Lien Position</Label>
                         <Select name="lienPosition" value={formData.lienPosition} onValueChange={(v) => handleInputChange('lienPosition', v)}>
@@ -619,16 +644,6 @@ export default function App() {
                             <SelectItem value="45">45</SelectItem>
                           </SelectContent>
                         </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="loanType" className={hasError('loanType') ? 'text-red-600' : ''}>Loan Type *</Label>
-                        <Select name="loanType" value={formData.loanType} onValueChange={(v) => handleInputChange('loanType', v)}>
-                          <SelectTrigger id="loanType" className={hasError('loanType') ? 'border-red-500' : ''}><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="nonqm">Non-QM</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        {hasError('loanType') && <p className="text-xs text-red-600">{validationErrors.loanType}</p>}
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="loanPurpose" className={hasError('loanPurpose') ? 'text-red-600' : ''}>Loan Purpose *</Label>
@@ -658,7 +673,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* LINE 2: Appraised Value/Sales Price, Loan Amount, 1st Lien (LTV tooltip), CLTV, Amortization */}
+                    {/* LINE 2: Appraised Value/Sales Price, Loan Amount, LTV, CLTV, Amortization */}
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-4">
                       <div className="space-y-2">
                         <Label htmlFor="propertyValue" className={hasError('propertyValue') ? 'text-red-600' : ''}>Value/Sales Price *</Label>
@@ -685,24 +700,31 @@ export default function App() {
                         {hasError('loanAmount') && <p className="text-xs text-red-600">{validationErrors.loanAmount}</p>}
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="firstLienLTV" className="flex items-center gap-1">
-                          1st Lien
+                        <Label htmlFor="ltv" className="flex items-center gap-1">
+                          LTV
                           <span className="relative group">
                             <Info className="w-3.5 h-3.5 text-blue-500 cursor-help" />
                             <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 text-xs text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
-                              LTV: Loan-to-Value Ratio
+                              Loan-to-Value Ratio
                               <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></span>
                             </span>
                           </span>
                         </Label>
-                        <div id="firstLienLTV" className="h-10 px-3 py-2 bg-gray-100 border rounded-md text-sm font-medium">
-                          {calculatedLTV}%
+                        <div className="relative">
+                          <Input
+                            id="ltv"
+                            name="ltv"
+                            value={formData.ltv}
+                            onChange={(e) => handleInputChange('ltv', e.target.value.replace(/[^0-9.]/g, ''))}
+                            className="pr-8"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500 pointer-events-none">%</span>
                         </div>
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="cltv">CLTV</Label>
                         <div id="cltv" className="h-10 px-3 py-2 bg-gray-100 border rounded-md text-sm font-medium">
-                          {formData.lienPosition === '1st' ? `${calculatedLTV}%` : 'Enter 2nd Lien'}
+                          {formData.lienPosition === '1st' ? `${formData.ltv}%` : 'Enter 2nd Lien'}
                         </div>
                       </div>
                       <div className="space-y-2">
@@ -721,14 +743,8 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* LINE 3: Product, Payment, Impound Type + Cashout if applicable */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="product">Product</Label>
-                        <div id="product" className="h-10 px-3 py-2 bg-gray-100 border rounded-md text-sm font-medium">
-                          Conventional
-                        </div>
-                      </div>
+                    {/* LINE 3: Payment, Impound Type + Cashout if applicable */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
                       <div className="space-y-2">
                         <Label htmlFor="paymentType">Payment</Label>
                         <Select name="paymentType" value={formData.paymentType} onValueChange={(v) => handleInputChange('paymentType', v)}>
