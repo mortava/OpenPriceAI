@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Calculator, DollarSign, Loader2, CheckCircle2, AlertCircle, Info, ChevronDown, ChevronUp, Menu, X } from 'lucide-react'
+import { Calculator, DollarSign, Loader2, CheckCircle2, AlertCircle, Info, ChevronDown, ChevronUp, Menu, X, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -625,10 +625,10 @@ export default function App() {
             </div>
             {/* Desktop nav */}
             <nav className="hidden md:flex items-center gap-6">
-              <a href="#" className="text-sm font-medium text-gray-600 hover:text-gray-900">AI Deal Desk</a>
-              <a href="#" className="text-sm font-medium text-gray-600 hover:text-gray-900">Pipeline</a>
-              <a href="#" className="text-sm font-medium text-gray-600 hover:text-gray-900">AVM</a>
-              <a href="#" className="text-sm font-medium text-gray-600 hover:text-gray-900">AUS</a>
+              <a href="https://app.defywholesale.com" target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-gray-600 hover:text-gray-900">AI Deal Desk</a>
+              <a href="https://app.defywholesale.com" target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-gray-600 hover:text-gray-900">Pipeline</a>
+              <a href="https://app.defywholesale.com" target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-gray-600 hover:text-gray-900">AVM</a>
+              <a href="https://app.defywholesale.com" target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-gray-600 hover:text-gray-900">AUS</a>
               <Button variant="outline" size="sm">Sign Out</Button>
             </nav>
             {/* Mobile hamburger */}
@@ -646,10 +646,10 @@ export default function App() {
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-gray-200 bg-white shadow-lg absolute left-0 right-0 z-50">
             <div className="px-4 py-3 space-y-2">
-              <a href="#" className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-md" onClick={() => setMobileMenuOpen(false)}>AI Deal Desk</a>
-              <a href="#" className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-md" onClick={() => setMobileMenuOpen(false)}>Pipeline</a>
-              <a href="#" className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-md" onClick={() => setMobileMenuOpen(false)}>AVM</a>
-              <a href="#" className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-md" onClick={() => setMobileMenuOpen(false)}>AUS</a>
+              <a href="https://app.defywholesale.com" target="_blank" rel="noopener noreferrer" className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-md" onClick={() => setMobileMenuOpen(false)}>AI Deal Desk</a>
+              <a href="https://app.defywholesale.com" target="_blank" rel="noopener noreferrer" className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-md" onClick={() => setMobileMenuOpen(false)}>Pipeline</a>
+              <a href="https://app.defywholesale.com" target="_blank" rel="noopener noreferrer" className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-md" onClick={() => setMobileMenuOpen(false)}>AVM</a>
+              <a href="https://app.defywholesale.com" target="_blank" rel="noopener noreferrer" className="block px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-md" onClick={() => setMobileMenuOpen(false)}>AUS</a>
               <div className="border-t pt-2 mt-2">
                 <Button variant="outline" size="sm" className="w-full" onClick={() => setMobileMenuOpen(false)}>Sign Out</Button>
               </div>
@@ -1507,6 +1507,14 @@ export default function App() {
                   </Card>
                 )}
 
+              {/* Submit Loan Button */}
+              <div className="mt-6">
+                <a href="https://sub.defywholesale.com/" target="_blank" rel="noopener noreferrer" className="block">
+                  <Button type="button" size="lg" className="w-full bg-green-600 hover:bg-green-700 text-white">
+                    <ExternalLink className="w-4 h-4 mr-2" />Submit + Lock
+                  </Button>
+                </a>
+              </div>
               </>
             ) : null}
           </div>
