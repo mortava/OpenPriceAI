@@ -616,9 +616,9 @@ export default function App() {
                     {/* LINE 1: Lien Position, Lock Period, Loan Type, Loan Purpose, Term */}
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                       <div className="space-y-2">
-                        <Label>Lien Position</Label>
-                        <Select value={formData.lienPosition} onValueChange={(v) => handleInputChange('lienPosition', v)}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
+                        <Label htmlFor="lienPosition">Lien Position</Label>
+                        <Select name="lienPosition" value={formData.lienPosition} onValueChange={(v) => handleInputChange('lienPosition', v)}>
+                          <SelectTrigger id="lienPosition"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="1st">1st</SelectItem>
                             <SelectItem value="2nd">2nd</SelectItem>
@@ -627,9 +627,9 @@ export default function App() {
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label>Lock Period</Label>
-                        <Select value={formData.lockPeriod} onValueChange={(v) => handleInputChange('lockPeriod', v)}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
+                        <Label htmlFor="lockPeriod">Lock Period</Label>
+                        <Select name="lockPeriod" value={formData.lockPeriod} onValueChange={(v) => handleInputChange('lockPeriod', v)}>
+                          <SelectTrigger id="lockPeriod"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="30">30</SelectItem>
                             <SelectItem value="45">45</SelectItem>
@@ -637,9 +637,9 @@ export default function App() {
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label className={hasError('loanType') ? 'text-red-600' : ''}>Loan Type *</Label>
-                        <Select value={formData.loanType} onValueChange={(v) => handleInputChange('loanType', v)}>
-                          <SelectTrigger className={hasError('loanType') ? 'border-red-500' : ''}><SelectValue /></SelectTrigger>
+                        <Label htmlFor="loanType" className={hasError('loanType') ? 'text-red-600' : ''}>Loan Type *</Label>
+                        <Select name="loanType" value={formData.loanType} onValueChange={(v) => handleInputChange('loanType', v)}>
+                          <SelectTrigger id="loanType" className={hasError('loanType') ? 'border-red-500' : ''}><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="nonqm">Non-QM</SelectItem>
                           </SelectContent>
@@ -647,9 +647,9 @@ export default function App() {
                         {hasError('loanType') && <p className="text-xs text-red-600">{validationErrors.loanType}</p>}
                       </div>
                       <div className="space-y-2">
-                        <Label className={hasError('loanPurpose') ? 'text-red-600' : ''}>Loan Purpose *</Label>
-                        <Select value={formData.loanPurpose} onValueChange={(v) => handleInputChange('loanPurpose', v)}>
-                          <SelectTrigger className={hasError('loanPurpose') ? 'border-red-500' : ''}><SelectValue /></SelectTrigger>
+                        <Label htmlFor="loanPurpose" className={hasError('loanPurpose') ? 'text-red-600' : ''}>Loan Purpose *</Label>
+                        <Select name="loanPurpose" value={formData.loanPurpose} onValueChange={(v) => handleInputChange('loanPurpose', v)}>
+                          <SelectTrigger id="loanPurpose" className={hasError('loanPurpose') ? 'border-red-500' : ''}><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="purchase">Purchase</SelectItem>
                             <SelectItem value="refinance">Refi Rate/Term</SelectItem>
@@ -659,9 +659,9 @@ export default function App() {
                         {hasError('loanPurpose') && <p className="text-xs text-red-600">{validationErrors.loanPurpose}</p>}
                       </div>
                       <div className="space-y-2">
-                        <Label className={hasError('loanTerm') ? 'text-red-600' : ''}>Term *</Label>
-                        <Select value={formData.loanTerm} onValueChange={(v) => handleInputChange('loanTerm', v)}>
-                          <SelectTrigger className={hasError('loanTerm') ? 'border-red-500' : ''}><SelectValue /></SelectTrigger>
+                        <Label htmlFor="loanTerm" className={hasError('loanTerm') ? 'text-red-600' : ''}>Term *</Label>
+                        <Select name="loanTerm" value={formData.loanTerm} onValueChange={(v) => handleInputChange('loanTerm', v)}>
+                          <SelectTrigger id="loanTerm" className={hasError('loanTerm') ? 'border-red-500' : ''}><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="30">30 Year</SelectItem>
                             <SelectItem value="25">25 Year</SelectItem>
@@ -677,8 +677,10 @@ export default function App() {
                     {/* LINE 2: Appraised Value/Sales Price, Loan Amount, 1st Lien (LTV tooltip), CLTV, Amortization */}
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-4">
                       <div className="space-y-2">
-                        <Label className={hasError('propertyValue') ? 'text-red-600' : ''}>Value/Sales Price *</Label>
+                        <Label htmlFor="propertyValue" className={hasError('propertyValue') ? 'text-red-600' : ''}>Value/Sales Price *</Label>
                         <Input
+                          id="propertyValue"
+                          name="propertyValue"
                           value={formData.propertyValue}
                           onChange={(e) => handleInputChange('propertyValue', formatNumberInput(e.target.value))}
                           icon={<DollarSign className="w-4 h-4" />}
@@ -687,8 +689,10 @@ export default function App() {
                         {hasError('propertyValue') && <p className="text-xs text-red-600">{validationErrors.propertyValue}</p>}
                       </div>
                       <div className="space-y-2">
-                        <Label className={hasError('loanAmount') ? 'text-red-600' : ''}>Loan Amount *</Label>
+                        <Label htmlFor="loanAmount" className={hasError('loanAmount') ? 'text-red-600' : ''}>Loan Amount *</Label>
                         <Input
+                          id="loanAmount"
+                          name="loanAmount"
                           value={formData.loanAmount}
                           onChange={(e) => handleInputChange('loanAmount', formatNumberInput(e.target.value))}
                           icon={<DollarSign className="w-4 h-4" />}
@@ -718,9 +722,9 @@ export default function App() {
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <Label>Amortization</Label>
-                        <Select value={formData.amortization} onValueChange={(v) => handleInputChange('amortization', v)}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
+                        <Label htmlFor="amortization">Amortization</Label>
+                        <Select name="amortization" value={formData.amortization} onValueChange={(v) => handleInputChange('amortization', v)}>
+                          <SelectTrigger id="amortization"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="fixed">Fixed</SelectItem>
                             <SelectItem value="arm3">3 Year ARM</SelectItem>
@@ -742,9 +746,9 @@ export default function App() {
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <Label>Payment</Label>
-                        <Select value={formData.paymentType} onValueChange={(v) => handleInputChange('paymentType', v)}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
+                        <Label htmlFor="paymentType">Payment</Label>
+                        <Select name="paymentType" value={formData.paymentType} onValueChange={(v) => handleInputChange('paymentType', v)}>
+                          <SelectTrigger id="paymentType"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="pi">P&I</SelectItem>
                             <SelectItem value="io">Interest Only</SelectItem>
@@ -752,9 +756,9 @@ export default function App() {
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label>Impound Type</Label>
-                        <Select value={formData.impoundType} onValueChange={(v) => handleInputChange('impoundType', v)}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
+                        <Label htmlFor="impoundType">Impound Type</Label>
+                        <Select name="impoundType" value={formData.impoundType} onValueChange={(v) => handleInputChange('impoundType', v)}>
+                          <SelectTrigger id="impoundType"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="escrowed">Taxes and Insurance Escrowed</SelectItem>
                             <SelectItem value="noescrow">No Escrow</SelectItem>
@@ -763,8 +767,10 @@ export default function App() {
                       </div>
                       {showCashoutField && (
                         <div className="space-y-2">
-                          <Label>Cashout Amount</Label>
+                          <Label htmlFor="cashoutAmount">Cashout Amount</Label>
                           <Input
+                            id="cashoutAmount"
+                            name="cashoutAmount"
                             value={formData.cashoutAmount}
                             onChange={(e) => handleInputChange('cashoutAmount', formatNumberInput(e.target.value))}
                             icon={<DollarSign className="w-4 h-4" />}
@@ -784,37 +790,40 @@ export default function App() {
                           ZIP Code * {zipLoading && <Loader2 className="w-3 h-3 inline animate-spin ml-1" />}
                         </Label>
                         <Input
+                          id="propertyZip"
+                          name="propertyZip"
                           maxLength={5}
                           value={formData.propertyZip}
                           onChange={(e) => handleInputChange('propertyZip', e.target.value.replace(/\D/g, ''))}
                           className={hasError('propertyZip') ? 'border-red-500' : ''}
                           placeholder="Enter ZIP to auto-fill"
+                          autoComplete="postal-code"
                         />
                         {hasError('propertyZip') && <p className="text-xs text-red-600">{validationErrors.propertyZip}</p>}
                       </div>
                       <div className="space-y-2">
-                        <Label className={hasError('propertyState') ? 'text-red-600' : ''}>State *</Label>
-                        <Select value={formData.propertyState} onValueChange={(v) => handleInputChange('propertyState', v)}>
-                          <SelectTrigger className={hasError('propertyState') ? 'border-red-500' : ''}><SelectValue /></SelectTrigger>
+                        <Label htmlFor="propertyState" className={hasError('propertyState') ? 'text-red-600' : ''}>State *</Label>
+                        <Select name="propertyState" value={formData.propertyState} onValueChange={(v) => handleInputChange('propertyState', v)}>
+                          <SelectTrigger id="propertyState" className={hasError('propertyState') ? 'border-red-500' : ''}><SelectValue /></SelectTrigger>
                           <SelectContent>{US_STATES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                         </Select>
                         {hasError('propertyState') && <p className="text-xs text-red-600">{validationErrors.propertyState}</p>}
                       </div>
                       <div className="space-y-2">
-                        <Label>County</Label>
-                        <Input value={formData.propertyCounty} onChange={(e) => handleInputChange('propertyCounty', e.target.value)} />
+                        <Label htmlFor="propertyCounty">County</Label>
+                        <Input id="propertyCounty" name="propertyCounty" value={formData.propertyCounty} onChange={(e) => handleInputChange('propertyCounty', e.target.value)} />
                       </div>
                       <div className="space-y-2">
-                        <Label>City</Label>
-                        <Input value={formData.propertyCity} onChange={(e) => handleInputChange('propertyCity', e.target.value)} />
+                        <Label htmlFor="propertyCity">City</Label>
+                        <Input id="propertyCity" name="propertyCity" value={formData.propertyCity} onChange={(e) => handleInputChange('propertyCity', e.target.value)} autoComplete="address-level2" />
                       </div>
                     </div>
                     {/* LINE 2: Property type fields */}
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
                       <div className="space-y-2">
-                        <Label className={hasError('occupancyType') ? 'text-red-600' : ''}>Property Use *</Label>
-                        <Select value={formData.occupancyType} onValueChange={(v) => handleInputChange('occupancyType', v)}>
-                          <SelectTrigger className={hasError('occupancyType') ? 'border-red-500' : ''}><SelectValue /></SelectTrigger>
+                        <Label htmlFor="occupancyType" className={hasError('occupancyType') ? 'text-red-600' : ''}>Property Use *</Label>
+                        <Select name="occupancyType" value={formData.occupancyType} onValueChange={(v) => handleInputChange('occupancyType', v)}>
+                          <SelectTrigger id="occupancyType" className={hasError('occupancyType') ? 'border-red-500' : ''}><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="primary">Primary Residence</SelectItem>
                             <SelectItem value="secondary">Second Home</SelectItem>
@@ -824,9 +833,9 @@ export default function App() {
                         {hasError('occupancyType') && <p className="text-xs text-red-600">{validationErrors.occupancyType}</p>}
                       </div>
                       <div className="space-y-2">
-                        <Label className={hasError('propertyType') ? 'text-red-600' : ''}>Property Type *</Label>
-                        <Select value={formData.propertyType} onValueChange={(v) => handleInputChange('propertyType', v)}>
-                          <SelectTrigger className={hasError('propertyType') ? 'border-red-500' : ''}><SelectValue /></SelectTrigger>
+                        <Label htmlFor="propertyType" className={hasError('propertyType') ? 'text-red-600' : ''}>Property Type *</Label>
+                        <Select name="propertyType" value={formData.propertyType} onValueChange={(v) => handleInputChange('propertyType', v)}>
+                          <SelectTrigger id="propertyType" className={hasError('propertyType') ? 'border-red-500' : ''}><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="sfr">Single Family</SelectItem>
                             <SelectItem value="condo">Condo</SelectItem>
@@ -841,9 +850,9 @@ export default function App() {
                         {hasError('propertyType') && <p className="text-xs text-red-600">{validationErrors.propertyType}</p>}
                       </div>
                       <div className="space-y-2">
-                        <Label>Structure Type</Label>
-                        <Select value={formData.structureType} onValueChange={(v) => handleInputChange('structureType', v)}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
+                        <Label htmlFor="structureType">Structure Type</Label>
+                        <Select name="structureType" value={formData.structureType} onValueChange={(v) => handleInputChange('structureType', v)}>
+                          <SelectTrigger id="structureType"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="detached">Detached</SelectItem>
                             <SelectItem value="attached">Attached</SelectItem>
@@ -853,27 +862,33 @@ export default function App() {
                     </div>
                     {/* LINE 3: Property checkboxes */}
                     <div className="flex flex-wrap gap-6 mt-4">
-                      <label className="flex items-center gap-2 cursor-pointer">
+                      <label htmlFor="isRuralProperty" className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
+                          id="isRuralProperty"
+                          name="isRuralProperty"
                           checked={formData.isRuralProperty}
                           onChange={(e) => handleInputChange('isRuralProperty', e.target.checked)}
                           className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
                         />
                         <span className="text-sm">Rural Property</span>
                       </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
+                      <label htmlFor="isNonWarrantableProject" className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
+                          id="isNonWarrantableProject"
+                          name="isNonWarrantableProject"
                           checked={formData.isNonWarrantableProject}
                           onChange={(e) => handleInputChange('isNonWarrantableProject', e.target.checked)}
                           className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
                         />
                         <span className="text-sm">Non-Warrantable Project?</span>
                       </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
+                      <label htmlFor="isMixedUsePML" className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
+                          id="isMixedUsePML"
+                          name="isMixedUsePML"
                           checked={formData.isMixedUsePML}
                           onChange={(e) => handleInputChange('isMixedUsePML', e.target.checked)}
                           className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
@@ -888,8 +903,10 @@ export default function App() {
                     <h3 className="text-sm font-semibold text-gray-700 mb-4 uppercase tracking-wide">Borrower Details</h3>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div className="space-y-2">
-                        <Label className={hasError('creditScore') ? 'text-red-600' : ''}>Estimated Credit Score *</Label>
+                        <Label htmlFor="creditScore" className={hasError('creditScore') ? 'text-red-600' : ''}>Estimated Credit Score *</Label>
                         <Input
+                          id="creditScore"
+                          name="creditScore"
                           maxLength={3}
                           value={formData.creditScore}
                           onChange={(e) => handleInputChange('creditScore', e.target.value.replace(/\D/g, ''))}
@@ -898,8 +915,10 @@ export default function App() {
                         {hasError('creditScore') && <p className="text-xs text-red-600">{validationErrors.creditScore}</p>}
                       </div>
                       <div className="space-y-2">
-                        <Label className={hasError('dti') ? 'text-red-600' : ''}>DTI (%) *</Label>
+                        <Label htmlFor="dti" className={hasError('dti') ? 'text-red-600' : ''}>DTI (%) *</Label>
                         <Input
+                          id="dti"
+                          name="dti"
                           maxLength={2}
                           value={formData.dti}
                           onChange={(e) => handleInputChange('dti', e.target.value.replace(/\D/g, ''))}
@@ -908,9 +927,9 @@ export default function App() {
                         {hasError('dti') && <p className="text-xs text-red-600">{validationErrors.dti}</p>}
                       </div>
                       <div className="space-y-2">
-                        <Label>Citizenship</Label>
-                        <Select value={formData.citizenship} onValueChange={(v) => handleInputChange('citizenship', v)}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
+                        <Label htmlFor="citizenship">Citizenship</Label>
+                        <Select name="citizenship" value={formData.citizenship} onValueChange={(v) => handleInputChange('citizenship', v)}>
+                          <SelectTrigger id="citizenship"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="usCitizen">US Citizen</SelectItem>
                             <SelectItem value="permanentResident">Permanent Resident</SelectItem>
@@ -921,9 +940,9 @@ export default function App() {
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label>Doc Type</Label>
-                        <Select value={formData.documentationType} onValueChange={(v) => handleInputChange('documentationType', v)}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
+                        <Label htmlFor="documentationType">Doc Type</Label>
+                        <Select name="documentationType" value={formData.documentationType} onValueChange={(v) => handleInputChange('documentationType', v)}>
+                          <SelectTrigger id="documentationType"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="fullDoc">Full Document</SelectItem>
                             <SelectItem value="dscr">Debt Service Coverage (DSCR)</SelectItem>
@@ -939,18 +958,22 @@ export default function App() {
                       </div>
                     </div>
                     <div className="mt-4 flex flex-wrap gap-6">
-                      <label className="flex items-center gap-2 cursor-pointer">
+                      <label htmlFor="isSelfEmployed" className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
+                          id="isSelfEmployed"
+                          name="isSelfEmployed"
                           checked={formData.isSelfEmployed}
                           onChange={(e) => handleInputChange('isSelfEmployed', e.target.checked)}
                           className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
                         />
                         <span className="text-sm">Self Employed</span>
                       </label>
-                      <label className="flex items-center gap-2 cursor-pointer">
+                      <label htmlFor="isFTHB" className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
+                          id="isFTHB"
+                          name="isFTHB"
                           checked={formData.isFTHB}
                           onChange={(e) => handleInputChange('isFTHB', e.target.checked)}
                           className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
@@ -966,9 +989,9 @@ export default function App() {
                       <h3 className="text-sm font-semibold text-blue-700 mb-4 uppercase tracking-wide">Investor Details</h3>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="space-y-2">
-                          <Label>Prepay Period</Label>
-                          <Select value={formData.prepayPeriod} onValueChange={(v) => handleInputChange('prepayPeriod', v)}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
+                          <Label htmlFor="prepayPeriod">Prepay Period</Label>
+                          <Select name="prepayPeriod" value={formData.prepayPeriod} onValueChange={(v) => handleInputChange('prepayPeriod', v)}>
+                            <SelectTrigger id="prepayPeriod"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="5year">5 Year</SelectItem>
                               <SelectItem value="4year">4 Year</SelectItem>
@@ -980,9 +1003,9 @@ export default function App() {
                           </Select>
                         </div>
                         <div className="space-y-2">
-                          <Label>Prepay Type</Label>
-                          <Select value={formData.prepayType} onValueChange={(v) => handleInputChange('prepayType', v)}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
+                          <Label htmlFor="prepayType">Prepay Type</Label>
+                          <Select name="prepayType" value={formData.prepayType} onValueChange={(v) => handleInputChange('prepayType', v)}>
+                            <SelectTrigger id="prepayType"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="5pct">5%</SelectItem>
                               <SelectItem value="declining">Declining</SelectItem>
@@ -991,9 +1014,9 @@ export default function App() {
                           </Select>
                         </div>
                         <div className="space-y-2">
-                          <Label>DSCR Entity Type</Label>
-                          <Select value={formData.dscrEntityType} onValueChange={(v) => handleInputChange('dscrEntityType', v)}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
+                          <Label htmlFor="dscrEntityType">DSCR Entity Type</Label>
+                          <Select name="dscrEntityType" value={formData.dscrEntityType} onValueChange={(v) => handleInputChange('dscrEntityType', v)}>
+                            <SelectTrigger id="dscrEntityType"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="individual">Individual</SelectItem>
                               <SelectItem value="llc">LLC</SelectItem>
@@ -1006,16 +1029,20 @@ export default function App() {
                       {/* DSCR Calculation Fields */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
                         <div className="space-y-2">
-                          <Label>Present Housing Expense</Label>
+                          <Label htmlFor="presentHousingExpense">Present Housing Expense</Label>
                           <Input
+                            id="presentHousingExpense"
+                            name="presentHousingExpense"
                             value={formData.presentHousingExpense}
                             onChange={(e) => handleInputChange('presentHousingExpense', formatNumberInput(e.target.value))}
                             icon={<DollarSign className="w-4 h-4" />}
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label>Gross Rent</Label>
+                          <Label htmlFor="grossRent">Gross Rent</Label>
                           <Input
+                            id="grossRent"
+                            name="grossRent"
                             value={formData.grossRent}
                             onChange={(e) => handleInputChange('grossRent', formatNumberInput(e.target.value))}
                             icon={<DollarSign className="w-4 h-4" />}
@@ -1054,9 +1081,11 @@ export default function App() {
                       </div>
                       {/* LINE 3: Investor checkboxes */}
                       <div className="flex flex-wrap gap-6 mt-4">
-                        <label className="flex items-center gap-2 cursor-pointer">
+                        <label htmlFor="isSeasonalProperty" className="flex items-center gap-2 cursor-pointer">
                           <input
                             type="checkbox"
+                            id="isSeasonalProperty"
+                            name="isSeasonalProperty"
                             checked={formData.isSeasonalProperty || formData.isShortTermRental}
                             onChange={(e) => {
                               handleInputChange('isSeasonalProperty', e.target.checked)
@@ -1066,9 +1095,11 @@ export default function App() {
                           />
                           <span className="text-sm">Seasonal Property/Short Term Rental</span>
                         </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
+                        <label htmlFor="isCrossCollateralized" className="flex items-center gap-2 cursor-pointer">
                           <input
                             type="checkbox"
+                            id="isCrossCollateralized"
+                            name="isCrossCollateralized"
                             checked={formData.isCrossCollateralized}
                             onChange={(e) => handleInputChange('isCrossCollateralized', e.target.checked)}
                             className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
@@ -1125,16 +1156,16 @@ export default function App() {
 
                     {showOtherDetails && (
                       <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-3">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input type="checkbox" checked={formData.is5PlusUnits} onChange={(e) => handleInputChange('is5PlusUnits', e.target.checked)} className="w-4 h-4 rounded" />
+                        <label htmlFor="is5PlusUnits" className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" id="is5PlusUnits" name="is5PlusUnits" checked={formData.is5PlusUnits} onChange={(e) => handleInputChange('is5PlusUnits', e.target.checked)} className="w-4 h-4 rounded" />
                           <span className="text-sm">5+ Units</span>
                         </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input type="checkbox" checked={formData.hasITIN} onChange={(e) => handleInputChange('hasITIN', e.target.checked)} className="w-4 h-4 rounded" />
+                        <label htmlFor="hasITIN" className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" id="hasITIN" name="hasITIN" checked={formData.hasITIN} onChange={(e) => handleInputChange('hasITIN', e.target.checked)} className="w-4 h-4 rounded" />
                           <span className="text-sm">Borrower has ITIN</span>
                         </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input type="checkbox" checked={formData.isAVMOrCDA} onChange={(e) => handleInputChange('isAVMOrCDA', e.target.checked)} className="w-4 h-4 rounded" />
+                        <label htmlFor="isAVMOrCDA" className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" id="isAVMOrCDA" name="isAVMOrCDA" checked={formData.isAVMOrCDA} onChange={(e) => handleInputChange('isAVMOrCDA', e.target.checked)} className="w-4 h-4 rounded" />
                           <span className="text-sm">AVM or CDA</span>
                         </label>
                       </div>
