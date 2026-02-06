@@ -93,6 +93,11 @@ function unescapeXml(escaped: string): string {
   return escaped.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&')
 }
 
+function unescapeHtmlEntities(text: string): string {
+  if (!text) return ''
+  return text.replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&')
+}
+
 function normalizeFormData(data: any): any {
   const norm = { ...data }
   if (data.fico && !data.creditScore) norm.creditScore = data.fico
@@ -282,7 +287,7 @@ function parseSOAPResponse(xmlString: string): any {
 
         if (desc) {
           templateAdjustments.push({
-            description: desc,
+            description: unescapeHtmlEntities(desc),
             amount: priceAdj,
             rateAdj: rateAdj,
           })
@@ -351,7 +356,7 @@ function parseSOAPResponse(xmlString: string): any {
         while ((adjMatch = adjRegex.exec(rateBody)) !== null) {
           const adjAttrs = adjMatch[1]
           adjustments.push({
-            description: getAttr(adjAttrs, 'Description') || getAttr(adjAttrs, 'Name'),
+            description: unescapeHtmlEntities(getAttr(adjAttrs, 'Description') || getAttr(adjAttrs, 'Name')),
             amount: parseFloat(getAttr(adjAttrs, 'Amount')) || parseFloat(getAttr(adjAttrs, 'Price')) || 0,
             rateAdj: parseFloat(getAttr(adjAttrs, 'RateAdj')) || parseFloat(getAttr(adjAttrs, 'Rate')) || 0,
           })
