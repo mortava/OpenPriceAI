@@ -38,11 +38,15 @@ async function getOAuthToken(): Promise<string> {
 }
 
 // ================= ENUM MAPPING FUNCTIONS =================
-function mapLoanPurpose(purpose: string): number {
-  // MeridianLink loan purpose codes: 1=Purchase, 2=Refinance (Cash-Out), 3=Construction/Other
-  // Note: For DSCR loans, "refinance" and "cashout" both map to code 2 (Cash-Out Refi)
-  // as the lender may not offer Rate/Term refinance for investment properties
-  const map: Record<string, number> = { purchase: 1, refinance: 2, cashout: 2 }
+function mapLoanPurpose(purpose: string, isDSCR: boolean = false): number {
+  // MeridianLink sLPurposeTPe codes: 1=Purchase, 2=Cash-Out Refi, 3=Rate/Term Refi (No Cash-Out)
+  if (isDSCR) {
+    // DSCR: both refi types map to code 2 (Cash-Out) - lenders don't distinguish for investment
+    const map: Record<string, number> = { purchase: 1, refinance: 2, cashout: 2 }
+    return map[purpose] || 1
+  }
+  // Standard: rate/term refi = 3 (No Cash-Out), cash-out refi = 2
+  const map: Record<string, number> = { purchase: 1, refinance: 3, cashout: 2 }
   return map[purpose] || 1
 }
 
@@ -169,7 +173,7 @@ function buildLOXmlFormat(formData: any): string {
     <field id="sOccTPe">${isDSCR ? 3 : mapOccupancy(formData.occupancyType || 'primary')}</field>
     <field id="sProdSpT">${mapPropertyType(formData.propertyType || 'sfr')}</field>
     <field id="sProdIsSpInRuralArea">${formData.isRuralProperty || false}</field>
-    <field id="sLPurposeTPe">${mapLoanPurpose(formData.loanPurpose || 'purchase')}</field>
+    <field id="sLPurposeTPe">${mapLoanPurpose(formData.loanPurpose || 'purchase', isDSCR)}</field>
     <field id="sHouseValPe">${propertyValue}</field>
     <field id="sDownPmtPcPe">${downPaymentPct.toFixed(2)}</field>
     <field id="sLAmtCalcPe">${loanAmount}</field>
