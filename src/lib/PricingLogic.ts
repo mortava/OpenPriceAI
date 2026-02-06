@@ -260,22 +260,24 @@ export const calculateDSCR = (grossRent: number, presentHousingExpense: number):
   display: string
 } => {
   if (presentHousingExpense <= 0) {
-    return { value: 0, range: 'below1.00', display: 'N/A' }
+    return { value: 0, range: 'noRatio', display: 'N/A' }
   }
 
   const ratio = grossRent / presentHousingExpense
   let range: string
 
-  if (ratio >= 1.50) range = '1.50+'
-  else if (ratio >= 1.25) range = '1.25-1.499'
-  else if (ratio >= 1.15) range = '1.15-1.249'
-  else if (ratio >= 1.00) range = '1.00-1.149'
-  else range = 'below1.00'
+  // Ranges must match App.tsx calculatedDSCR and API mapDSCRRatio
+  if (ratio >= 1.250) range = '>=1.250'
+  else if (ratio >= 1.150) range = '1.150-1.249'
+  else if (ratio >= 1.000) range = '1.00-1.149'
+  else if (ratio >= 0.750) range = '0.750-0.999'
+  else if (ratio >= 0.500) range = '0.500-0.749'
+  else range = 'noRatio'
 
   return {
-    value: Math.round(ratio * 100) / 100,
+    value: Math.round(ratio * 1000) / 1000,
     range,
-    display: ratio.toFixed(2)
+    display: ratio.toFixed(3)
   }
 }
 
@@ -589,6 +591,77 @@ export const validateScenario = (scenario: LoanScenario): ValidationResult => {
 }
 
 // ============================================================================
+// PRE-SUBMIT FORM VALIDATION
+// ============================================================================
+
+/**
+ * Validate form data before sending to API.
+ * Prevents fake/default/invalid data from reaching MeridianLink.
+ */
+export const validateFormBeforeSubmit = (formData: Record<string, any>): ValidationResult => {
+  const errors: string[] = []
+  const warnings: string[] = []
+
+  const parseNum = (val: any): number => Number(String(val || '0').replace(/,/g, '')) || 0
+
+  const loanAmount = parseNum(formData.loanAmount)
+  const propertyValue = parseNum(formData.propertyValue)
+  const creditScore = parseNum(formData.creditScore)
+  const dti = parseNum(formData.dti)
+  const ltv = parseFloat(formData.ltv) || 0
+
+  // === Required numeric validations ===
+  if (loanAmount < 50000) errors.push('Loan amount must be at least $50,000')
+  if (loanAmount > 10000000) errors.push('Loan amount exceeds maximum ($10M)')
+  if (propertyValue < 50000) errors.push('Property value must be at least $50,000')
+  if (propertyValue > 50000000) errors.push('Property value exceeds maximum ($50M)')
+  if (loanAmount > propertyValue) errors.push('Loan amount cannot exceed property value')
+  if (creditScore < 300 || creditScore > 850) errors.push('Credit score must be 300-850')
+  if (dti < 1 || dti > 65) errors.push('DTI must be 1-65%')
+  if (ltv <= 0 || ltv > 100) errors.push('LTV must be between 0% and 100%')
+
+  // === Required string fields ===
+  if (!formData.propertyZip || String(formData.propertyZip).length !== 5) {
+    errors.push('Valid 5-digit ZIP code is required')
+  }
+  if (!formData.propertyState) errors.push('Property state is required')
+  if (!formData.occupancyType) errors.push('Property use is required')
+  if (!formData.propertyType) errors.push('Property type is required')
+  if (!formData.loanPurpose) errors.push('Loan purpose is required')
+  if (!formData.loanTerm) errors.push('Loan term is required')
+
+  // === DSCR-specific validation ===
+  if (formData.documentationType === 'dscr') {
+    if (formData.occupancyType !== 'investment') {
+      errors.push('DSCR income documentation is only available for Investment properties')
+    }
+    const grossRent = parseNum(formData.grossRent)
+    const housingExpense = parseNum(formData.presentHousingExpense)
+    if (grossRent <= 0) errors.push('Gross Rent is required for DSCR loans')
+    if (housingExpense <= 0) errors.push('Housing Expense is required for DSCR loans')
+    if (grossRent > 0 && housingExpense > 0) {
+      const dscrRatio = grossRent / housingExpense
+      if (dscrRatio < 0.5) warnings.push(`DSCR ratio ${dscrRatio.toFixed(3)} is very low - may not qualify`)
+    }
+  }
+
+  // === Cash-out LTV cap ===
+  if (formData.loanPurpose === 'cashout' && ltv > 85) {
+    errors.push(`Cash-out refinance max LTV is 85%. Current: ${ltv.toFixed(1)}%`)
+  }
+
+  // === LTV consistency check ===
+  if (loanAmount > 0 && propertyValue > 0) {
+    const calculatedLtv = (loanAmount / propertyValue) * 100
+    if (Math.abs(calculatedLtv - ltv) > 1) {
+      warnings.push(`LTV (${ltv}%) doesn't match Loan/Value calc (${calculatedLtv.toFixed(1)}%)`)
+    }
+  }
+
+  return { isValid: errors.length === 0, errors, warnings }
+}
+
+// ============================================================================
 // EXPORT DEFAULTS
 // ============================================================================
 
@@ -610,5 +683,6 @@ export default {
   calculateTotalAdjustments,
   findBestRate,
   findClosestToPar,
-  validateScenario
+  validateScenario,
+  validateFormBeforeSubmit
 }

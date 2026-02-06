@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatCurrency, formatPercent } from '@/lib/utils'
+import { validateFormBeforeSubmit } from '@/lib/PricingLogic'
 
 interface LoanData {
   // Loan Information
@@ -434,8 +435,17 @@ export default function App() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!validateForm()) { setError('Please fix the errors above'); return }
+
+    // Pre-submit validation via PricingLogic (prevents fake/invalid data from reaching API)
+    const preCheck = validateFormBeforeSubmit(formData)
+    if (!preCheck.isValid) {
+      setError(preCheck.errors.join('. '))
+      return
+    }
+
     setIsLoading(true); setError(null); setResult(null)
     try {
+      const isDSCR = formData.documentationType === 'dscr'
       const response = await fetch('/api/get-pricing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -449,9 +459,10 @@ export default function App() {
           creditScore: Number(formData.creditScore),
           dti: Number(formData.dti),
           ltv: parseFloat(formData.ltv) || 0,
-          presentHousingExpense: formData.documentationType === 'dscr' ? Number(formData.presentHousingExpense.replace(/,/g, '')) : undefined,
-          grossRent: formData.documentationType === 'dscr' ? Number(formData.grossRent.replace(/,/g, '')) : undefined,
-          dscrRatio: formData.documentationType === 'dscr' ? calculatedDSCR.range : undefined
+          presentHousingExpense: isDSCR ? Number(formData.presentHousingExpense.replace(/,/g, '')) : undefined,
+          grossRent: isDSCR ? Number(formData.grossRent.replace(/,/g, '')) : undefined,
+          dscrRatio: isDSCR ? calculatedDSCR.range : undefined,
+          dscrValue: isDSCR ? calculatedDSCR.ratio : undefined
         })
       })
       const data = await response.json()
@@ -679,8 +690,8 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* LINE 2: Appraised Value/Sales Price, Loan Amount, LTV, CLTV, Amortization */}
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-4">
+                    {/* LINE 2: Appraised Value/Sales Price, Loan Amount, LTV, CLTV (2nd/HELOC only), Amortization */}
+                    <div className={`grid grid-cols-2 ${formData.lienPosition !== '1st' ? 'md:grid-cols-5' : 'md:grid-cols-4'} gap-4 mt-4`}>
                       <div className="space-y-2">
                         <Label htmlFor="propertyValue" className={hasError('propertyValue') ? 'text-red-600' : ''}>Value/Sales Price *</Label>
                         <Input
@@ -727,12 +738,14 @@ export default function App() {
                           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-500 pointer-events-none">%</span>
                         </div>
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="cltv">CLTV</Label>
-                        <div id="cltv" className="h-10 px-3 py-2 bg-gray-100 border rounded-md text-sm font-medium">
-                          {formData.lienPosition === '1st' ? `${formData.ltv}%` : 'Enter 2nd Lien'}
+                      {formData.lienPosition !== '1st' && (
+                        <div className="space-y-2">
+                          <Label htmlFor="cltv">CLTV</Label>
+                          <div id="cltv" className="h-10 px-3 py-2 bg-gray-100 border rounded-md text-sm font-medium">
+                            Enter 2nd Lien
+                          </div>
                         </div>
-                      </div>
+                      )}
                       <div className="space-y-2">
                         <Label htmlFor="amortization">Amortization</Label>
                         <Select name="amortization" value={formData.amortization} onValueChange={(v) => handleInputChange('amortization', v)}>

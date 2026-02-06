@@ -179,7 +179,7 @@ function buildLOXmlFormat(formData: any): string {
     <field id="sCreditScoreEstimatePe">${formData.creditScore || 740}</field>
     <field id="aBTotalScoreIsFthbQP">${formData.isFTHB || false}</field>
     <field id="sIncomeDocumentationType">${mapIncomeDocType(isDSCR ? 'dscr' : docType)}</field>
-    ${isDSCR ? `<field id="aDSCR %">${mapDSCRRatio(formData.dscrRatio)}</field>` : ''}
+    ${isDSCR ? `<field id="aDSCR %">${formData.dscrValue ? Number(formData.dscrValue).toFixed(3) : mapDSCRRatio(formData.dscrRatio)}</field>` : ''}
     ${isDSCR ? `<field id="aOccupancyRate">${formData.occupancyRate || 100}</field>` : ''}
     <field id="sProdFilterPrepayNone">true</field>
     <field id="sProdFilterPrepayHasPPP">${includePPP}</field>
