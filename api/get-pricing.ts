@@ -240,9 +240,32 @@ function parseSOAPResponse(xmlString: string): any {
     })
   }
 
-  // Also capture a larger XML sample to see the full structure
-  const adjustmentsSectionMatch = level2.match(/<Adjustments[\s\S]{0,2000}/i)
-  const debugAdjustmentsSection = adjustmentsSectionMatch ? adjustmentsSectionMatch[0] : 'No Adjustments section found'
+  // Also capture the AdjustmentsTable section
+  const adjustmentsTableMatch = level2.match(/<AdjustmentsTable>([\s\S]*?)<\/AdjustmentsTable>/i)
+  let debugAdjustmentsSection = 'No AdjustmentsTable found'
+
+  if (adjustmentsTableMatch) {
+    debugAdjustmentsSection = adjustmentsTableMatch[0].substring(0, 3000)
+
+    // Parse adjustments from AdjustmentsTable
+    const tableContent = adjustmentsTableMatch[1]
+    const tableAdjRegex = /<Adjustment\s+([^>]+)\/?>/gi
+    let tableAdjMatch
+    while ((tableAdjMatch = tableAdjRegex.exec(tableContent)) !== null) {
+      const adjAttrs = tableAdjMatch[1]
+      const desc = getAttr(adjAttrs, 'sAdjDescription') || getAttr(adjAttrs, 'Description')
+      const priceAdj = parseFloat(getAttr(adjAttrs, 'dAdjPriceAdj')) || parseFloat(getAttr(adjAttrs, 'PriceAdj')) || parseFloat(getAttr(adjAttrs, 'Amount')) || 0
+      const rateAdj = parseFloat(getAttr(adjAttrs, 'dAdjRateAdj')) || parseFloat(getAttr(adjAttrs, 'RateAdj')) || 0
+
+      if (desc) {
+        globalAdjustments.push({
+          description: desc,
+          amount: priceAdj,
+          rateAdj: rateAdj,
+        })
+      }
+    }
+  }
 
   const programRegex = /<Program\s([^>]+)>([\s\S]*?)<\/Program>/gi
   let programMatch
