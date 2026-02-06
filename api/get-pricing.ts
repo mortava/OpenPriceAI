@@ -573,7 +573,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         programs: eligiblePrograms,
         totalPrograms: eligiblePrograms.length,
         source: 'meridianlink',
-        globalAdjustments: result.globalAdjustments,
+        globalAdjustments: !isDSCRRequest && result.globalAdjustments
+          ? result.globalAdjustments.filter((adj: any) => !(adj.description || '').toUpperCase().includes('DSCR'))
+          : result.globalAdjustments,
         debugXmlSample: result.debugXmlSample,
         debugAdjustmentsSection: result.debugAdjustmentsSection,
       },
