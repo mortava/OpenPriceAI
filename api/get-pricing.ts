@@ -39,7 +39,8 @@ async function getOAuthToken(): Promise<string> {
 
 // ================= ENUM MAPPING FUNCTIONS =================
 function mapLoanPurpose(purpose: string): number {
-  const map: Record<string, number> = { purchase: 1, refinance: 2, cashout: 3 }
+  // MeridianLink loan purpose codes: 1=Purchase, 2=Cash-Out Refi, 3=Rate/Term Refi
+  const map: Record<string, number> = { purchase: 1, refinance: 3, cashout: 2 }
   return map[purpose] || 1
 }
 
