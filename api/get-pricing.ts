@@ -169,6 +169,8 @@ function buildLOXmlFormat(formData: any): string {
     <field id="sOccTPe">${isDSCR ? 3 : mapOccupancy(formData.occupancyType || 'primary')}</field>
     <field id="sProdSpT">${mapPropertyType(formData.propertyType || 'sfr')}</field>
     <field id="sProdIsSpInRuralArea">${formData.isRuralProperty || false}</field>
+    <field id="aProdNonWarrantable">${formData.isNonWarrantableProject || false}</field>
+    <field id="sNonWarrantable">${formData.isNonWarrantableProject ? 1 : 0}</field>
     <field id="sLPurposeTPe">${mapLoanPurpose(formData.loanPurpose || 'purchase')}</field>
     <field id="sHouseValPe">${propertyValue}</field>
     <field id="sDownPmtPcPe">${downPaymentPct.toFixed(2)}</field>
@@ -579,7 +581,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Debug: capture what was sent to MeridianLink
     const dscrCodeSent = isDSCRRequest ? mapDSCRRatio(formData.dscrRatio) : null
-    const impoundCodeSent = formData.impoundType === 'escrowed' ? 2 : 0
+    const impoundCodeSent = formData.impoundType === 'escrowed' ? 2 : 1
 
     return res.json({
       success: true,
@@ -604,6 +606,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           loanPurpose: formData.loanPurpose,
           occupancyType: formData.occupancyType,
           documentationType: formData.documentationType,
+          isNonWarrantable: formData.isNonWarrantableProject || false,
         },
         globalAdjustments: result.globalAdjustments
           ? result.globalAdjustments.filter((adj: any) => {
