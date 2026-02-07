@@ -499,8 +499,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const result = parseSOAPResponse(resultXml)
 
-    // Filter eligible programs
-    let eligiblePrograms = result.programs.filter((p: any) => p.status === 'Eligible')
+    // Filter eligible programs - include programs marked 'Eligible' OR those with available rate options
+    let eligiblePrograms = result.programs.filter((p: any) =>
+      p.status === 'Eligible' ||
+      (p.rateOptions && p.rateOptions.some((ro: any) => ro.status === 'Available'))
+    )
 
     // For Primary/Secondary: filter out PPP programs (PPP is Investment only)
     // BUT allow "0MO PPP" / "0 YR PPP" which means NO prepayment penalty
