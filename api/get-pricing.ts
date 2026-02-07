@@ -175,8 +175,7 @@ function buildLOXmlFormat(formData: any): string {
     <field id="sDownPmtPcPe">${downPaymentPct.toFixed(2)}</field>
     <field id="sLAmtCalcPe">${loanAmount}</field>
     <field id="sTotalRenovationCosts">0</field>
-    <field id="sProdImpound">${formData.impoundType === 'escrowed'}</field>
-    <field id="sImpoundTPe">${formData.impoundType === 'escrowed' ? 2 : 1}</field>
+    <field id="sProdImpound">${formData.impoundType !== 'noescrow'}</field>
     <field id="sWillEscrowBeWaived">${formData.impoundType === 'noescrow'}</field>
     <field id="sProdRLckdDays">${lockDays}</field>
     <field id="sCreditScoreEstimatePe">${formData.creditScore || 740}</field>
@@ -578,7 +577,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Debug: capture what was sent to MeridianLink
     const dscrCodeSent = isDSCRRequest ? mapDSCRRatio(formData.dscrRatio) : null
-    const impoundCodeSent = formData.impoundType === 'escrowed' ? 2 : 1
+    const escrowWaived = formData.impoundType === 'noescrow'
 
     return res.json({
       success: true,
@@ -599,7 +598,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           dscrCode: dscrCodeSent,
           dscrValue: formData.dscrValue || null,
           impoundType: formData.impoundType,
-          impoundCode: impoundCodeSent,
+          escrowWaived: escrowWaived,
           loanPurpose: formData.loanPurpose,
           occupancyType: formData.occupancyType,
           documentationType: formData.documentationType,
