@@ -169,8 +169,7 @@ function buildLOXmlFormat(formData: any): string {
     <field id="sOccTPe">${isDSCR ? 3 : mapOccupancy(formData.occupancyType || 'primary')}</field>
     <field id="sProdSpT">${mapPropertyType(formData.propertyType || 'sfr')}</field>
     <field id="sProdIsSpInRuralArea">${formData.isRuralProperty || false}</field>
-    <field id="aProdNonWarrantable">${formData.isNonWarrantableProject || false}</field>
-    <field id="sNonWarrantable">${formData.isNonWarrantableProject ? 1 : 0}</field>
+    <field id="sProdIsNonwarrantableProj">${formData.isNonWarrantableProject || false}</field>
     <field id="sLPurposeTPe">${mapLoanPurpose(formData.loanPurpose || 'purchase')}</field>
     <field id="sHouseValPe">${propertyValue}</field>
     <field id="sDownPmtPcPe">${downPaymentPct.toFixed(2)}</field>
@@ -178,9 +177,7 @@ function buildLOXmlFormat(formData: any): string {
     <field id="sTotalRenovationCosts">0</field>
     <field id="sProdImpound">${formData.impoundType === 'escrowed'}</field>
     <field id="sImpoundTPe">${formData.impoundType === 'escrowed' ? 2 : 1}</field>
-    <field id="aProdEscrowWaiver">${formData.impoundType === 'noescrow'}</field>
-    <field id="aEscrowWaiver">${formData.impoundType === 'noescrow'}</field>
-    <field id="sEscrowWaiver">${formData.impoundType === 'noescrow' ? 1 : 0}</field>
+    <field id="sWillEscrowBeWaived">${formData.impoundType === 'noescrow'}</field>
     <field id="sProdRLckdDays">${lockDays}</field>
     <field id="sCreditScoreEstimatePe">${formData.creditScore || 740}</field>
     <field id="aBTotalScoreIsFthbQP">${formData.isFTHB || false}</field>
