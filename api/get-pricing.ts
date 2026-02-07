@@ -506,6 +506,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // BUT allow "0MO PPP" / "0 YR PPP" which means NO prepayment penalty
     const isInvestment = formData.occupancyType === 'investment'
     if (!isInvestment) {
+      // Filter out DSCR programs for Primary/Secondary - DSCR is Investment only
+      eligiblePrograms = eligiblePrograms.filter((p: any) => {
+        const name = ((p.programName || p.name || '') + ' ' + (p.description || '')).toUpperCase()
+        return !name.includes('DSCR')
+      })
+
       // Helper to check if program has actual PPP (not 0MO/0YR which means no penalty)
       const hasPPP = (text: string): boolean => {
         if (!text) return false
