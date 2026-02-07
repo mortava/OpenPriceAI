@@ -175,8 +175,10 @@ function buildLOXmlFormat(formData: any): string {
     <field id="sLAmtCalcPe">${loanAmount}</field>
     <field id="sTotalRenovationCosts">0</field>
     <field id="sProdImpound">${formData.impoundType === 'escrowed'}</field>
-    <field id="sImpoundTPe">${formData.impoundType === 'escrowed' ? 2 : 0}</field>
+    <field id="sImpoundTPe">${formData.impoundType === 'escrowed' ? 2 : 1}</field>
     <field id="aProdEscrowWaiver">${formData.impoundType === 'noescrow'}</field>
+    <field id="aEscrowWaiver">${formData.impoundType === 'noescrow'}</field>
+    <field id="sEscrowWaiver">${formData.impoundType === 'noescrow' ? 1 : 0}</field>
     <field id="sProdRLckdDays">${lockDays}</field>
     <field id="sCreditScoreEstimatePe">${formData.creditScore || 740}</field>
     <field id="aBTotalScoreIsFthbQP">${formData.isFTHB || false}</field>
