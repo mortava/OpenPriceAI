@@ -74,6 +74,17 @@ function mapIncomeDocType(documentationType: string): number {
   return map[documentationType] || 1
 }
 
+function mapCitizenship(citizenship: string): number {
+  const map: Record<string, number> = {
+    usCitizen: 0,
+    permanentResident: 1,
+    nonPermanentResident: 2,
+    foreignNational: 3,
+    itin: 4,
+  }
+  return map[citizenship] ?? 0
+}
+
 function mapDSCRRatio(dscrRatio: string): number {
   const map: Record<string, number> = {
     '>=1.250': 1,
@@ -179,6 +190,8 @@ function buildLOXmlFormat(formData: any): string {
     <field id="sProdRLckdDays">${lockDays}</field>
     <field id="sCreditScoreEstimatePe">${formData.creditScore || 740}</field>
     <field id="aBTotalScoreIsFthbQP">${formData.isFTHB || false}</field>
+    <field id="sCitizenshipResidencyT">${mapCitizenship(formData.citizenship || 'usCitizen')}</field>
+    <field id="aBTotalScoreIsITIN">${(formData.citizenship === 'itin' || formData.hasITIN) ? true : false}</field>
     <field id="sIncomeDocumentationType">${mapIncomeDocType(isDSCR ? 'dscr' : docType)}</field>
     ${isDSCR ? `<field id="aDSCR %">${mapDSCRRatio(formData.dscrRatio)}</field>` : ''}
     ${isDSCR ? `<field id="aOccupancyRate">100</field>` : ''}

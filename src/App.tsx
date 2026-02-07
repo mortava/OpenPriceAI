@@ -368,6 +368,10 @@ export default function App() {
         updated.occupancyType = 'investment'
         // Keep loanType as nonqm - don't change it
       }
+      // Auto-set hasITIN when citizenship is ITIN
+      if (field === 'citizenship') {
+        updated.hasITIN = value === 'itin'
+      }
       return updated
     })
     setError(null)
