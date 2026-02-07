@@ -42,34 +42,32 @@ function mapLoanPurpose(purpose: string): number {
   // MeridianLink sLPurposeTPe: 1=Purchase, 2=Refinance (all types)
   // This lender's Non-QM config uses code 2 for both rate/term and cash-out refinance.
   // Cash-out vs rate/term adjustments are stripped client-side based on user selection.
-  const map: Record<string, number> = { purchase: 1, refinance: 2, cashout: 2 }
+  const map: Record<string, number> = { purchase: 0, refinance: 1, cashout: 2 }
   return map[purpose] || 1
 }
 
 function mapOccupancy(occupancy: string): number {
-  const map: Record<string, number> = { primary: 1, secondary: 2, investment: 3 }
-  return map[occupancy] || 1
+  const map: Record<string, number> = { primary: 0, secondary: 1, investment: 2 }
+  return map[occupancy] || 0
 }
 
 function mapPropertyType(type: string): number {
-  const map: Record<string, number> = { sfr: 1, condo: 2, townhouse: 3, '2unit': 4, '3unit': 5, '4unit': 6, '5-9unit': 7 }
-  return map[type] || 1
+  const map: Record<string, number> = { sfr: 0, condo: 2, townhouse: 0, '2unit': 8, '3unit': 8, '4unit': 8, '5-9unit': 11 }
+  return map[type] || 0
 }
 
 function mapIncomeDocType(documentationType: string): number {
   const map: Record<string, number> = {
-    fullDoc: 1,
-    altDoc: 2,
-    bankStatement: 3,
-    bankStatement12: 3,
-    bankStatement24: 3,
-    bankStatementOther: 3,
-    taxReturns1Yr: 2,
-    assetDepletion: 4,
-    assetUtilization: 4,
-    dscr: 5,
-    voe: 6,
-    noRatio: 7,
+    fullDoc: 0,
+    Debt Service Coverage (DSCR): 20,
+    bankStatement12: 13,
+    bankStatement24: 14,
+    taxReturns1Yr: 18,
+    assetDepletion: 19,
+    assetUtilization: 19,
+    P&LOnlybankStatementOther: 17,
+    voe: 22,
+    noRatio50: 21,
   }
   return map[documentationType] || 1
 }
@@ -81,7 +79,6 @@ function mapDSCRRatio(dscrRatio: string): number {
     '1.00-1.149': 3,
     '0.750-0.999': 4,
     '0.500-0.749': 5,
-    'noRatio': 6,
   }
   return map[dscrRatio || '1.00-1.149'] || 3
 }

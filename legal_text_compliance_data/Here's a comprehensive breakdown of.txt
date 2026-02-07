@@ -1,0 +1,178 @@
+Here's a comprehensive breakdown of all API POST and GET calls captured when "Run Price My Loan" is clicked, along with all the defined fields:
+
+API Calls Made When "Run Price My Loan" is Clicked
+SEQUENCE OF API CALLS:
+1. POST CalculateData (triggered on field changes/save before Run)
+
+URL: /webapp/PMLService.aspx?method=CalculateData
+Purpose: Saves and recalculates the loan data on the server
+Contains all form fields (see detailed fields below)
+
+2. POST GetNumberOfLoanProgramsFor1st (triggered on field changes)
+
+URL: /webapp/PMLService.aspx?method=GetNumberOfLoanProgramsFor1st
+Returns: Number of eligible programs (e.g., 14)
+
+3. POST GetResult_SubmitUnderwritingByGrouping (triggered on Run click)
+
+URL: /main/mainservice.aspx?method=GetResult_SubmitUnderwritingByGrouping
+Request: Sends loanid, sLienQualifyModeT, RenderResultModeT, TraceId
+Response includes:
+
+LoanPurpose: "RefinCashout"
+IsQPLoan: "True"
+ProductCount: "14"
+PricingOperationId
+JsonLoanProgramOptions (the PML Options filter checkboxes)
+
+
+
+4. POST GetResults (main pricing results call)
+
+URL: /main/mainservice.aspx?method=GetResults
+Request includes: LoanId, PricingOption: "PML", PricingOperationId, plus the full mlJson config
+Response: Full pricing results with EligibleGroups and IneligibleGroups, each containing GroupName, ResultRateOptions with Rate, Price, Payment, DTI, APR, QM, Closing Costs, Cash to Close, Reserves, etc.
+
+5. POST RecordClientTiming
+
+URL: /common/UtilitiesService.aspx?method=RecordClientTiming
+Purpose: Performance tracking
+
+
+All Defined Fields Sent in the API (from CalculateData POST)
+Zip Codes → SpZip = 90210 //populates: State, County, City
+
+State → SpStatePe = CA
+
+County → SpCounty = Los Angeles
+
+City → SpCity = Beverly Hills
+
+In Rural Areas → ProdIsSpInRuralArea = False //Only applicable for DSCR (hide field unless Debt Service Coverage / DSCR
+
+Property Use → OccTPe = 2 (Investment)
+
+Gross Rents → SpGrossRentPe = $10,000.00
+
+Occupancy Rate → OccRPe = 100.000%
+
+Property Type → ProdSpT = 2 (Condo)
+
+Structure Type → ProdSpStructureT = 1 (Attached)
+
+Seasonal Property → SpIsSeasonalProperty = False
+
+New Construction → ProdIsNewConstruction = False
+
+Non-Warrantable Project → ProdIsNonwarrantableProj = True
+
+Condotel → ProdIsCondotel = False
+
+FHA Condo Approval Status → sFhaCondoApprovalStatusT = 0
+
+Condo Stories → ProdCondoStories = 1
+
+Additional Monthly Housing Expenses → sMonthlyPmtPe = $1,000.00
+
+Area Median Income → AreaMedianIncome = $113,500.00
+
+Manufactured Home Advantage → HomeIsMhAdvantageTri = 0
+
+Loan Purpose → LPurposeT = 2 (Refinance)
+
+Is Refinancing → sIsRefinancing = True
+
+Student Loan Cashout Refi → IsStudentLoanCashoutRefi = False
+
+Cashout Amount → ProdCashoutAmt = $50,000.00
+
+Current P&I Payment → ProdCurrPIPmt = $0.00
+
+Current MIP/Month → ProdCurrMIPMo = $0.00
+
+Impounds / Escrow → ProdImpoundT = 3 (No Escrow)
+
+Property Inspection Waiver → ProdHasPropertyInspectionWaiver = False
+
+Doc Type → ProdDocT = 20 (Debt Service Coverage / DSCR)
+
+Home Value → HouseValPe = $800,000.00
+
+Equity → EquityPe = $200,000.00
+
+Down Payment % → DownPmtPcPe = 25.000%
+
+LTV → LtvRPe = 75.000%
+
+CLTV → CltvRPe = 75.000%
+
+HCLTV → HCLTVRPe = 75.000%
+
+Loan Amount → LAmtCalcPe = $600,000.00
+
+Credit Line Amount → CreditLineAmt = $600,000.00
+
+Has Second Financing → HasSecondFinancingT = False
+
+Rate Lock Period → ProdRLckdDays = 30 days
+
+Rate Lock Expiration → ProdRLckdExpiredDLabel = 3/8/2026
+
+Loan Originator Paid By → OriginatorCompensationPaymentSourceT = 1 (Borrower)
+
+Originator Comp % → OriginatorCompensationBorrPaidPc = 0.000%
+
+Originator Comp Base → OriginatorCompensationBorrPaidBaseT = 0 (Loan Amount)
+
+Originator Comp Amount → OriginatorCompensationBorrPaidMb = $0.00
+
+Expected AUS Response → Prod3rdPartyUwResultT = 0 (None / Not Submitted)
+
+Estimated Credit Score → CreditScoreEstimatePe = 720
+
+Total Monthly Income → PrimAppTotNonspIPe = $0.00
+
+Number of Financed Properties → sNumFinancedProperties = 1
+
+Total Liquid Assets → sAppTotLiqAsset = $500,000.00
+
+Present Housing Expense → PresOHExpPe = $0.00
+
+Conventional PMI Type → ConvSplitMIRT = 0 (No MI)
+
+UFMIP / FF Financed → ProdIsUFMIPFFFinanced = True
+
+FHA UFMIP → ProdFhaUfmip = 1.750%
+
+VA Funding Fee → ProdVaFundingFee = 2.150%
+
+USDA Guarantee Fee → ProdUSDAGuaranteeFee = 1.000%
+
+Horizon of Borrower Interest → HorizonOfBorrowerInterestInMonths = 60 months
+
+Mortgage Liability Paid Off at Closing → HasMortgageLiabilityThatWillBePaidOffAtClosing = False
+
+Texas 50(a)(6) → ProdIsTexas50a6Loan = False //Pass to API (not on form input fields)//
+
+Filter: Term 30 Years → ProdFilterDue30Yrs = true
+
+Filter: Term Others → ProdFilterDueOther = true //40 year
+
+Filter: Amortization Fixed → ProdFilterFinMethFixed = true
+
+Filter: Amortization Others → ProdFilterFinMethOther = true //40 year
+
+Filter: Product Conventional → ProdIncludeNormalProc = true
+
+Filter: Payment P&I → ProdFilterPmtTPI = true
+
+Filter: Payment I/O → ProdFilterPmtTIOnly = true
+
+Filter: Temp Buydowns None → ProdFilterInclNoTempBuydown = true //Pass to API (not on form input fields)//
+
+Filter: Prepay Penalty None → ProdFilterInclNoPPP = true
+
+Filter: Prepay Penalty Has PPP → ProdFilterInclPPP = true
+Condo → sProdSpT = 2 (Property Type = Condo)
+Non-Warrantable Project → sProdIsNonwarrantableProj = True
+Impounds - No Escrow → sProdImpoundT = 3 (No escrow)
