@@ -186,7 +186,7 @@ function buildLOXmlFormat(formData: any): string {
     <field id="sDownPmtPcPe">${downPaymentPct.toFixed(2)}</field>
     <field id="sLAmtCalcPe">${loanAmount}</field>
     <field id="sTotalRenovationCosts">0</field>
-    <field id="sProdImpoundT">${formData.impoundType === 'noescrow' ? 3 : 0}</field>
+    <field id="sProdImpoundT">${formData.impoundType === 'noescrow' ? 3 : 1}</field>
     <field id="sProdRLckdDays">${lockDays}</field>
     <field id="sCreditScoreEstimatePe">${formData.creditScore || 740}</field>
     <field id="aBTotalScoreIsFthbQP">${formData.isFTHB || false}</field>
@@ -499,11 +499,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const result = parseSOAPResponse(resultXml)
 
-    // Filter eligible programs - include programs marked 'Eligible' OR those with available rate options
-    let eligiblePrograms = result.programs.filter((p: any) =>
-      p.status === 'Eligible' ||
-      (p.rateOptions && p.rateOptions.some((ro: any) => ro.status === 'Available'))
-    )
+    // Filter eligible programs - strictly use API status
+    let eligiblePrograms = result.programs.filter((p: any) => p.status === 'Eligible')
 
     // For Primary/Secondary: filter out PPP programs (PPP is Investment only)
     // BUT allow "0MO PPP" / "0 YR PPP" which means NO prepayment penalty
