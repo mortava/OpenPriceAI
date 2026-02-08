@@ -51,4 +51,23 @@
   .input-focus {
     @apply outline-none ring-2 ring-primary/20 border-primary;
   }
+
+  /* Simple progress bar loader */
+  .loading-bar-track {
+    @apply w-full h-1.5 rounded-full overflow-hidden;
+    background: #dbeafe;
+  }
+
+  .loading-bar-fill {
+    @apply h-full rounded-full;
+    background: linear-gradient(90deg, #1e3a8a, #2563eb, #93c5fd);
+    background-size: 200% 100%;
+    transition: width 3.5s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: bar-shimmer 1.5s ease-in-out infinite;
+  }
+}
+
+@keyframes bar-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
 }

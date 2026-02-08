@@ -272,6 +272,14 @@ export default function App() {
   const [expandedProgram, setExpandedProgram] = useState<string | null>(null)
   const [showOtherDetails, setShowOtherDetails] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [loadingProgress, setLoadingProgress] = useState(0)
+
+  useEffect(() => {
+    if (!isLoading) { setLoadingProgress(0); return }
+    setLoadingProgress(10)
+    const timer = setTimeout(() => setLoadingProgress(92), 300)
+    return () => clearTimeout(timer)
+  }, [isLoading])
 
   // Auto-populate location from ZIP using API lookup
   const [zipLoading, setZipLoading] = useState(false)
@@ -1519,21 +1527,16 @@ export default function App() {
               </div>
               </>
             ) : isLoading ? (
-              <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-blue-50">
-                <CardContent className="py-16 flex flex-col items-center justify-center text-center">
-                  <div className="relative mb-6">
-                    <div className="w-16 h-16 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
-                    <DollarSign className="w-6 h-6 text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+              <div className="py-16 flex flex-col items-center justify-center">
+                <div className="w-full max-w-md">
+                  <div className="loading-bar-track">
+                    <div
+                      className="loading-bar-fill"
+                      style={{ width: `${loadingProgress}%` }}
+                    />
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Getting Live Pricing</h3>
-                  <p className="text-sm text-gray-500 mb-4">Connecting to MeridianLink QuickPricer...</p>
-                  <div className="flex gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-2 h-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }} />
-                  </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             ) : null}
           </div>
         </div>
