@@ -74,6 +74,25 @@ function mapIncomeDocType(documentationType: string): number {
   return map[documentationType] || 1
 }
 
+function mapProdDocType(documentationType: string): number {
+  // sProdDocT dropdown values from MeridianLink QuickPricer
+  const map: Record<string, number> = {
+    fullDoc: 0,
+    altDoc: 0,
+    bankStatement: 13,
+    bankStatement12: 13,
+    bankStatement24: 14,
+    bankStatementOther: 17,
+    taxReturns1Yr: 18,
+    assetDepletion: 19,
+    assetUtilization: 19,
+    dscr: 20,
+    voe: 22,
+    noRatio: 21,
+  }
+  return map[documentationType] ?? 0
+}
+
 function mapCitizenship(citizenship: string): number {
   const map: Record<string, number> = {
     usCitizen: 0,
@@ -193,6 +212,7 @@ function buildLOXmlFormat(formData: any): string {
     <field id="sCitizenshipResidencyT">${mapCitizenship(formData.citizenship || 'usCitizen')}</field>
     <field id="aBTotalScoreIsITIN">${(formData.citizenship === 'itin' || formData.hasITIN) ? true : false}</field>
     <field id="sIncomeDocumentationType">${mapIncomeDocType(isDSCR ? 'dscr' : docType)}</field>
+    <field id="sProdDocT">${mapProdDocType(isDSCR ? 'dscr' : docType)}</field>
     ${isDSCR ? `<field id="aDSCR %">${mapDSCRRatio(formData.dscrRatio)}</field>` : ''}
     ${isDSCR ? `<field id="aOccupancyRate">100</field>` : ''}
     ${!isDSCR ? `<field id="sPrimAppTotNonspIPe">200000</field>` : ''}
@@ -259,8 +279,8 @@ function parseSOAPResponse(xmlString: string): any {
     }
     globalAdjustments.push({
       description: getAttr(adjAttrs, 'sAdjDescription') || getAttr(adjAttrs, 'Description') || getAttr(adjAttrs, 'Name'),
-      amount: parseFloat(getAttr(adjAttrs, 'dAdjPriceAdj')) || parseFloat(getAttr(adjAttrs, 'Amount')) || parseFloat(getAttr(adjAttrs, 'Price')) || 0,
-      rateAdj: parseFloat(getAttr(adjAttrs, 'dAdjRateAdj')) || parseFloat(getAttr(adjAttrs, 'RateAdj')) || 0,
+      amount: -(parseFloat(getAttr(adjAttrs, 'dAdjPriceAdj')) || parseFloat(getAttr(adjAttrs, 'Amount')) || parseFloat(getAttr(adjAttrs, 'Price')) || 0),
+      rateAdj: -(parseFloat(getAttr(adjAttrs, 'dAdjRateAdj')) || parseFloat(getAttr(adjAttrs, 'RateAdj')) || 0),
     })
   }
 
@@ -295,13 +315,15 @@ function parseSOAPResponse(xmlString: string): any {
         if (isHidden) continue
 
         // Point is the price adjustment as a percentage string (e.g., "0.500%", "-0.250%")
-        // Pass through as-is from the API - do NOT negate
+        // MeridianLink uses "price convention": positive = adds to price (better for borrower)
+        // Industry LLPA convention: positive = cost/hit, negative = credit/benefit
+        // Negate to convert from price convention to LLPA convention
         const pointStr = getAttr(adjAttrs, 'Point') || '0'
-        const priceAdj = parseFloat(pointStr.replace('%', '')) || 0
+        const priceAdj = -(parseFloat(pointStr.replace('%', '')) || 0)
 
-        // Rate adjustment
+        // Rate adjustment (also negate for consistency)
         const rateStr = getAttr(adjAttrs, 'Rate') || '0'
-        const rateAdj = parseFloat(rateStr.replace('%', '')) || 0
+        const rateAdj = -(parseFloat(rateStr.replace('%', '')) || 0)
 
         if (desc) {
           templateAdjustments.push({
@@ -347,8 +369,8 @@ function parseSOAPResponse(xmlString: string): any {
       const adjAttrs = progAdjMatch[1]
       programAdjustments.push({
         description: getAttr(adjAttrs, 'Description') || getAttr(adjAttrs, 'Name') || getAttr(adjAttrs, 'Desc'),
-        amount: parseFloat(getAttr(adjAttrs, 'Amount')) || parseFloat(getAttr(adjAttrs, 'Price')) || parseFloat(getAttr(adjAttrs, 'PriceAdj')) || 0,
-        rateAdj: parseFloat(getAttr(adjAttrs, 'RateAdj')) || parseFloat(getAttr(adjAttrs, 'Rate')) || 0,
+        amount: -(parseFloat(getAttr(adjAttrs, 'Amount')) || parseFloat(getAttr(adjAttrs, 'Price')) || parseFloat(getAttr(adjAttrs, 'PriceAdj')) || 0),
+        rateAdj: -(parseFloat(getAttr(adjAttrs, 'RateAdj')) || parseFloat(getAttr(adjAttrs, 'Rate')) || 0),
       })
     }
 
@@ -375,8 +397,8 @@ function parseSOAPResponse(xmlString: string): any {
           const adjAttrs = adjMatch[1]
           adjustments.push({
             description: unescapeHtmlEntities(getAttr(adjAttrs, 'Description') || getAttr(adjAttrs, 'Name')),
-            amount: parseFloat(getAttr(adjAttrs, 'Amount')) || parseFloat(getAttr(adjAttrs, 'Price')) || 0,
-            rateAdj: parseFloat(getAttr(adjAttrs, 'RateAdj')) || parseFloat(getAttr(adjAttrs, 'Rate')) || 0,
+            amount: -(parseFloat(getAttr(adjAttrs, 'Amount')) || parseFloat(getAttr(adjAttrs, 'Price')) || 0),
+            rateAdj: -(parseFloat(getAttr(adjAttrs, 'RateAdj')) || parseFloat(getAttr(adjAttrs, 'Rate')) || 0),
           })
         }
       }
@@ -459,6 +481,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const docType = formData.documentationType || 'fullDoc'
     const loanType = formData.loanType || 'nonqm'
     const isDSCRRequest = docType === 'dscr' || loanType === 'dscr'
+    const isBankStmtRequest = ['bankStatement', 'bankStatement12', 'bankStatement24', 'bankStatementOther'].includes(docType)
     if (!isDSCRRequest) {
       delete formData.dscrRatio
       delete formData.grossRent
@@ -552,6 +575,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const desc = (adj.description || '').toUpperCase()
           // Strip DSCR adjustments when doc type is NOT DSCR
           if (!isDSCRRequest && desc.includes('DSCR')) return false
+          // Strip BANK STMT adjustments when doc type is NOT bank statement
+          if (!isBankStmtRequest && desc.includes('BANK ST')) return false
           // Strip CASHOUT adjustments when loan purpose is rate/term refi
           if (formData.loanPurpose === 'refinance' && desc.includes('CASHOUT')) return false
           return true
@@ -619,6 +644,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ? result.globalAdjustments.filter((adj: any) => {
               const desc = (adj.description || '').toUpperCase()
               if (!isDSCRRequest && desc.includes('DSCR')) return false
+              if (!isBankStmtRequest && desc.includes('BANK ST')) return false
               if (formData.loanPurpose === 'refinance' && desc.includes('CASHOUT')) return false
               return true
             })

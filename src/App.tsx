@@ -1308,7 +1308,7 @@ export default function App() {
                                     <td className="py-2 px-3 text-gray-700">
                                       {rateDisplay.toFixed(3)}%
                                     </td>
-                                    <td className={`py-2 px-3 font-medium ${priceDisplay < 0 ? 'text-red-600' : priceDisplay > 0 ? 'text-green-600' : 'text-gray-600'}`}>
+                                    <td className={`py-2 px-3 font-medium ${priceDisplay > 0 ? 'text-red-600' : priceDisplay < 0 ? 'text-green-600' : 'text-gray-600'}`}>
                                       {priceDisplay.toFixed(3)}
                                     </td>
                                     <td className="py-2 px-3 text-gray-900">{adj.description}</td>
