@@ -203,6 +203,7 @@ function buildLOXmlFormat(formData: any): string {
     <field id="sLPurposeTPe">${mapLoanPurpose(formData.loanPurpose || 'purchase')}</field>
     <field id="IsPurchaseLoanPanel">${(formData.loanPurpose || 'purchase') === 'purchase' ? 'true' : 'false'}</field>
     <field id="sHouseValPe">${propertyValue}</field>
+    ${(formData.loanPurpose || 'purchase') === 'purchase' ? `<field id="sSalePricePe">${propertyValue}</field>` : ''}
     <field id="sDownPmtPcPe">${downPaymentPct.toFixed(2)}</field>
     <field id="sLAmtCalcPe">${loanAmount}</field>
     <field id="sTotalRenovationCosts">0</field>
