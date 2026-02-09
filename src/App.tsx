@@ -273,6 +273,8 @@ export default function App() {
   const [showOtherDetails, setShowOtherDetails] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState(0)
+  const [lpResult, setLpResult] = useState<any>(null)
+  const [lpLoading, setLpLoading] = useState(false)
 
   useEffect(() => {
     if (!isLoading) { setLoadingProgress(0); return }
@@ -334,6 +336,7 @@ export default function App() {
     // Clear stale pricing results when any form field changes after pricing
     if (result) {
       setResult(null)
+      setLpResult(null)
       setExpandedProgram(null)
     }
 
@@ -466,42 +469,67 @@ export default function App() {
       return
     }
 
-    setIsLoading(true); setError(null); setResult(null)
-    try {
-      const isDSCR = formData.documentationType === 'dscr'
-      const response = await fetch('/api/get-pricing', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          loanType: 'nonqm',
-          product: 'conventional',
-          loanAmount: Number(formData.loanAmount.replace(/,/g, '')),
-          propertyValue: Number(formData.propertyValue.replace(/,/g, '')),
-          cashoutAmount: formData.cashoutAmount ? Number(formData.cashoutAmount.replace(/,/g, '')) : 0,
-          creditScore: Number(formData.creditScore),
-          dti: Number(formData.dti),
-          ltv: parseFloat(formData.ltv) || 0,
-          presentHousingExpense: isDSCR ? Number(formData.presentHousingExpense.replace(/,/g, '')) : undefined,
-          grossRent: isDSCR ? Number(formData.grossRent.replace(/,/g, '')) : undefined,
-          dscrRatio: isDSCR ? calculatedDSCR.range : undefined,
-          dscrValue: isDSCR ? calculatedDSCR.ratio : undefined
-        })
-      })
-      const data = await response.json()
-      if (!data.success) throw new Error(data.error || 'Pricing request failed')
+    setIsLoading(true); setError(null); setResult(null); setLpResult(null); setLpLoading(true)
+    const isDSCR = formData.documentationType === 'dscr'
+    const requestBody = {
+      ...formData,
+      loanType: 'nonqm',
+      product: 'conventional',
+      loanAmount: Number(formData.loanAmount.replace(/,/g, '')),
+      propertyValue: Number(formData.propertyValue.replace(/,/g, '')),
+      cashoutAmount: formData.cashoutAmount ? Number(formData.cashoutAmount.replace(/,/g, '')) : 0,
+      creditScore: Number(formData.creditScore),
+      dti: Number(formData.dti),
+      ltv: parseFloat(formData.ltv) || 0,
+      presentHousingExpense: isDSCR ? Number(formData.presentHousingExpense.replace(/,/g, '')) : undefined,
+      grossRent: isDSCR ? Number(formData.grossRent.replace(/,/g, '')) : undefined,
+      dscrRatio: isDSCR ? calculatedDSCR.range : undefined,
+      dscrValue: isDSCR ? calculatedDSCR.ratio : undefined
+    }
 
-      // Sanitize and validate the response data
-      const sanitizedResult = sanitizePricingResult(data.data)
-      if (!sanitizedResult) {
-        throw new Error('Invalid pricing response from server')
+    // Fire BOTH API calls in parallel
+    const mlPromise = fetch('/api/get-pricing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    }).then(r => r.json())
+
+    const lpPromise = fetch('/api/get-lp-pricing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    }).then(r => r.json()).catch(() => ({ success: false }))
+
+    // Handle MeridianLink result first (faster)
+    try {
+      const [mlResult, lpData] = await Promise.allSettled([mlPromise, lpPromise])
+
+      // Process MeridianLink result
+      if (mlResult.status === 'fulfilled' && mlResult.value.success) {
+        const sanitizedResult = sanitizePricingResult(mlResult.value.data)
+        if (sanitizedResult) {
+          setResult(sanitizedResult)
+        } else {
+          setError('Invalid pricing response from server')
+        }
+      } else {
+        const errMsg = mlResult.status === 'fulfilled'
+          ? (mlResult.value.error || 'Pricing request failed')
+          : 'Failed to get pricing'
+        setError(errMsg)
       }
 
-      setResult(sanitizedResult)
+      // Process LP result (may fail silently)
+      if (lpData.status === 'fulfilled' && lpData.value.success && lpData.value.data) {
+        setLpResult(lpData.value.data)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to get pricing')
     }
-    finally { setIsLoading(false) }
+    finally {
+      setIsLoading(false)
+      setLpLoading(false)
+    }
   }
 
   const hasError = (field: keyof LoanData) => !!validationErrors[field]
@@ -1525,6 +1553,77 @@ export default function App() {
                   </Button>
                 </a>
               </div>
+
+              {/* ADDITIONAL MARKET RATES - Lender Price (anonymized) */}
+              {lpLoading && !lpResult && (
+                <Card className="mt-4 border-gray-200">
+                  <CardContent className="py-6">
+                    <div className="flex items-center justify-center gap-3 text-gray-500">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span className="text-sm">Fetching additional market rates...</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {lpResult && lpResult.rateOptions && lpResult.rateOptions.length > 0 && (
+                <Card className="mt-4 border-indigo-200 bg-indigo-50/30">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center justify-between">
+                      <span>Additional Market Rates</span>
+                      <span className="text-xs font-normal text-gray-400">{lpResult.rateOptions.length} rates</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-gray-500 border-b">
+                            <th className="text-right py-2 px-3">Rate</th>
+                            <th className="text-right py-2 px-3">Price</th>
+                            <th className="text-right py-2 px-3">Payment</th>
+                            <th className="text-right py-2 px-3">APR</th>
+                            <th className="text-right py-2 px-3">Total Adj.</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {lpResult.rateOptions
+                            .filter((opt: any) => opt.price >= 99.0 && opt.price <= 101.0)
+                            .map((opt: any, idx: number) => {
+                              const isClosest = Math.abs(opt.price - 100) ===
+                                Math.min(...lpResult.rateOptions
+                                  .filter((o: any) => o.price >= 99.0 && o.price <= 101.0)
+                                  .map((o: any) => Math.abs(o.price - 100)))
+                              return (
+                                <tr key={idx} className={`border-t ${isClosest ? 'bg-blue-50' : ''}`}>
+                                  <td className="py-2 px-3 text-right font-semibold text-primary">
+                                    {safeNumber(opt.rate).toFixed(3)}%
+                                  </td>
+                                  <td className={`py-2 px-3 text-right ${opt.price >= 100 ? 'text-green-600 font-medium' : ''}`}>
+                                    {safeNumber(opt.price).toFixed(3)}
+                                  </td>
+                                  <td className="py-2 px-3 text-right font-medium">
+                                    {opt.payment > 0 ? formatCurrency(safeNumber(opt.payment)) : '-'}
+                                  </td>
+                                  <td className="py-2 px-3 text-right">
+                                    {safeNumber(opt.apr).toFixed(3)}%
+                                  </td>
+                                  <td className="py-2 px-3 text-right">
+                                    {opt.totalAdjustments !== 0 ? (
+                                      <span className={opt.totalAdjustments > 0 ? 'text-red-600' : 'text-green-600'}>
+                                        {opt.totalAdjustments > 0 ? '+' : ''}{safeNumber(opt.totalAdjustments).toFixed(3)}
+                                      </span>
+                                    ) : '-'}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
               </>
             ) : isLoading ? (
               <div className="py-16 flex flex-col items-center justify-center">
