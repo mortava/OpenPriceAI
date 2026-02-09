@@ -457,7 +457,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!rawValue) {
       return res.json({
         success: true,
-        data: { source: 'lenderprice', rateOptions: [], totalRates: 0 },
+        data: {
+          source: 'lenderprice',
+          rateOptions: [],
+          totalRates: 0,
+          debug: {
+            bqlKeys: Object.keys(bqlResult?.data || {}),
+            bqlErrors: bqlResult?.errors,
+            gotoStatus: bqlResult?.data?.goto?.status,
+          },
+        },
       })
     }
 
@@ -479,6 +488,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           source: 'lenderprice',
           rateOptions: [],
           totalRates: 0,
+          method: parsed.method || 'none',
           debug: parsed.debug,
         },
       })
@@ -487,6 +497,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Parse the LP API response tree into flat rate options
     const rateOptions = parseLPApiResponse(parsed.data)
 
+    // Include summary of raw data for debugging if no rates parsed
+    const rawPrograms = parsed.data?.results?.programs || []
+
     return res.json({
       success: true,
       data: {
@@ -494,6 +507,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         rateOptions,
         totalRates: rateOptions.length,
         method: parsed.method,
+        debug: rateOptions.length === 0 ? {
+          ...parsed.debug,
+          hasResults: !!parsed.data?.results,
+          qualifiedQMKeys: parsed.data?.results?.qualifiedQMData ? Object.keys(parsed.data.results.qualifiedQMData) : [],
+          qualifiedNonQMKeys: parsed.data?.results?.qualifiedNonQMData ? Object.keys(parsed.data.results.qualifiedNonQMData) : [],
+          programNames: rawPrograms.slice(0, 5),
+          rawResponseKeys: Object.keys(parsed.data || {}),
+        } : undefined,
       },
     })
   } catch (error) {
