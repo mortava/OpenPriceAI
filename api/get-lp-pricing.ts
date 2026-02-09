@@ -333,6 +333,28 @@ async function extractTokenViaBrowserless(browserlessToken: string): Promise<{ t
   return { token, debug }
 }
 
+// ================= Direct API Call (no auth needed) =================
+async function callLPSearchDirect(lpPayload: any): Promise<{ data: any; status: number } | null> {
+  try {
+    const resp = await fetch(LP_SEARCH_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Origin': 'https://flex.digitallending.com',
+        'Referer': 'https://flex.digitallending.com/',
+      },
+      body: JSON.stringify(lpPayload),
+      signal: AbortSignal.timeout(20000),
+    })
+    if (resp.ok) {
+      return { data: await resp.json(), status: resp.status }
+    }
+    return { data: null, status: resp.status }
+  } catch {
+    return null
+  }
+}
+
 // ================= Main Handler =================
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -343,15 +365,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ success: false, error: 'Method not allowed' })
 
-  const browserlessToken = process.env.BROWSERLESS_TOKEN
-  if (!browserlessToken) {
-    return res.json({ success: false, error: 'LP pricing not configured' })
-  }
-
   try {
     const formData = req.body
+    const lpPayload = buildLPPayload(formData)
 
-    // Step 1: Extract auth token via Browserless
+    // Strategy 1: Try direct API call (flex page shows no auth needed)
+    const directResult = await callLPSearchDirect(lpPayload)
+
+    if (directResult?.data) {
+      const rateOptions = parseLPApiResponse(directResult.data)
+      const rawPrograms = directResult.data?.results?.programs || []
+
+      return res.json({
+        success: true,
+        data: {
+          source: 'lenderprice',
+          rateOptions,
+          totalRates: rateOptions.length,
+          method: 'direct',
+          debug: rateOptions.length === 0 ? {
+            hasResults: !!directResult.data?.results,
+            qualifiedQMKeys: directResult.data?.results?.qualifiedQMData ? Object.keys(directResult.data.results.qualifiedQMData) : [],
+            qualifiedNonQMKeys: directResult.data?.results?.qualifiedNonQMData ? Object.keys(directResult.data.results.qualifiedNonQMData) : [],
+            programNames: rawPrograms.slice(0, 5),
+            rawResponseKeys: Object.keys(directResult.data || {}),
+          } : undefined,
+        },
+      })
+    }
+
+    // Strategy 2: If direct call failed, try via Browserless token extraction
+    const browserlessToken = process.env.BROWSERLESS_TOKEN
+    if (!browserlessToken) {
+      return res.json({
+        success: true,
+        data: {
+          source: 'lenderprice',
+          rateOptions: [],
+          totalRates: 0,
+          debug: { directStatus: directResult?.status, method: 'direct_failed_no_browserless' },
+        },
+      })
+    }
+
     const { token, debug: tokenDebug } = await extractTokenViaBrowserless(browserlessToken)
 
     if (!token) {
@@ -361,14 +417,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           source: 'lenderprice',
           rateOptions: [],
           totalRates: 0,
-          debug: tokenDebug,
+          debug: { ...tokenDebug, directStatus: directResult?.status },
         },
       })
     }
 
-    // Step 2: Build LP API payload and call directly
-    const lpPayload = buildLPPayload(formData)
-
+    // Make API call with extracted token
     const apiResponse = await fetch(LP_SEARCH_URL, {
       method: 'POST',
       headers: {
@@ -394,10 +448,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const apiData = await apiResponse.json()
-
-    // Step 3: Parse the LP response tree
     const rateOptions = parseLPApiResponse(apiData)
-    const rawPrograms = apiData?.results?.programs || []
 
     return res.json({
       success: true,
@@ -405,14 +456,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         source: 'lenderprice',
         rateOptions,
         totalRates: rateOptions.length,
-        method: 'directApi',
-        debug: rateOptions.length === 0 ? {
-          ...tokenDebug,
-          hasResults: !!apiData?.results,
-          qualifiedQMKeys: apiData?.results?.qualifiedQMData ? Object.keys(apiData.results.qualifiedQMData) : [],
-          qualifiedNonQMKeys: apiData?.results?.qualifiedNonQMData ? Object.keys(apiData.results.qualifiedNonQMData) : [],
-          programNames: rawPrograms.slice(0, 5),
-        } : undefined,
+        method: 'browserless_token',
       },
     })
   } catch (error) {
