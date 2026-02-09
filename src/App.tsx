@@ -487,49 +487,45 @@ export default function App() {
       dscrValue: isDSCR ? calculatedDSCR.ratio : undefined
     }
 
-    // Fire BOTH API calls in parallel
-    const mlPromise = fetch('/api/get-pricing', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-    }).then(r => r.json())
-
-    const lpPromise = fetch('/api/get-lp-pricing', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-    }).then(r => r.json()).catch(() => ({ success: false }))
-
-    // Handle MeridianLink result first (faster)
+    // Fire ML immediately, LP in background (LP takes ~15-20s via headless browser)
     try {
-      const [mlResult, lpData] = await Promise.allSettled([mlPromise, lpPromise])
+      const mlResponse = await fetch('/api/get-pricing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      })
+      const mlData = await mlResponse.json()
 
-      // Process MeridianLink result
-      if (mlResult.status === 'fulfilled' && mlResult.value.success) {
-        const sanitizedResult = sanitizePricingResult(mlResult.value.data)
+      if (mlData.success) {
+        const sanitizedResult = sanitizePricingResult(mlData.data)
         if (sanitizedResult) {
           setResult(sanitizedResult)
         } else {
           setError('Invalid pricing response from server')
         }
       } else {
-        const errMsg = mlResult.status === 'fulfilled'
-          ? (mlResult.value.error || 'Pricing request failed')
-          : 'Failed to get pricing'
-        setError(errMsg)
-      }
-
-      // Process LP result (may fail silently)
-      if (lpData.status === 'fulfilled' && lpData.value.success && lpData.value.data) {
-        setLpResult(lpData.value.data)
+        setError(mlData.error || 'Pricing request failed')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to get pricing')
-    }
-    finally {
+    } finally {
       setIsLoading(false)
-      setLpLoading(false)
     }
+
+    // LP runs independently in background — results appear when ready
+    fetch('/api/get-lp-pricing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    })
+      .then(r => r.json())
+      .then(lpData => {
+        if (lpData.success && lpData.data) {
+          setLpResult(lpData.data)
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLpLoading(false))
   }
 
   const hasError = (field: keyof LoanData) => !!validationErrors[field]
@@ -1606,7 +1602,7 @@ export default function App() {
                                     {opt.payment > 0 ? formatCurrency(safeNumber(opt.payment)) : '-'}
                                   </td>
                                   <td className="py-2 px-3 text-right">
-                                    {safeNumber(opt.apr).toFixed(3)}%
+                                    {opt.apr ? `${safeNumber(opt.apr).toFixed(3)}%` : '-'}
                                   </td>
                                   <td className="py-2 px-3 text-right">
                                     {opt.totalAdjustments !== 0 ? (
