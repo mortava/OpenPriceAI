@@ -208,9 +208,25 @@ function buildEvaluateScript(values: ReturnType<typeof mapFormValues>): string {
 
   if (!foundTable) {
     diag.steps.push('no_table_after_20s');
-    // Capture page state for debugging
+    // Capture more page state for debugging
     var pageText2 = (document.body.innerText || '');
     diag.steps.push('final_page: ' + pageText2.substring(0, 400));
+    // Look for error/validation messages
+    var errEls = document.querySelectorAll('.error, .alert, .warning, .validation, [class*=error], [class*=alert], [class*=invalid], .text-danger, .has-error');
+    var errs = [];
+    for (var ei = 0; ei < errEls.length; ei++) {
+      var errText = (errEls[ei].textContent || '').trim();
+      if (errText) errs.push(errText.substring(0, 100));
+    }
+    if (errs.length > 0) diag.steps.push('errors_found: ' + JSON.stringify(errs));
+    // Check for loading spinners still visible
+    var spinners = document.querySelectorAll('.spinner, .loading, [class*=spinner], [class*=loading], .fa-spin');
+    diag.steps.push('spinners_visible: ' + spinners.length);
+    // Capture form validation state
+    var invalidInputs = document.querySelectorAll('input:invalid, select:invalid, .ng-invalid');
+    diag.steps.push('invalid_inputs: ' + invalidInputs.length);
+    // Capture full body text (more context)
+    diag.fullPageText = pageText2.substring(0, 2000);
   }
 
   // Extra settle time after table appears
