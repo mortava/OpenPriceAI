@@ -1578,8 +1578,8 @@ export default function App() {
                   ? Math.min(...filteredLpRates.map((o: any) => Math.abs(o.price - 100)))
                   : 999
                 // Group by program for DSCR
-                const programGroups = isDSCR
-                  ? [...new Set(filteredLpRates.map((o: any) => o.program || 'Unknown'))].sort()
+                const programGroups: string[] = isDSCR
+                  ? [...new Set(filteredLpRates.map((o: any) => String(o.program || 'Unknown')))].sort() as string[]
                   : []
                 return (
                   <Card className="mt-4 border-indigo-200 bg-indigo-50/30">
