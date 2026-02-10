@@ -524,7 +524,7 @@ export default function App() {
         return r.json()
       })
       .then(lpData => {
-        console.log('[LP] Data received:', lpData.success, 'rates:', lpData.data?.rateOptions?.length || 0)
+        console.log('[LP] Data received:', lpData.success, 'rates:', lpData.data?.rateOptions?.length || 0, 'debug:', lpData.data?.debug)
         if (lpData.success && lpData.data) {
           setLpResult(lpData.data)
         } else {

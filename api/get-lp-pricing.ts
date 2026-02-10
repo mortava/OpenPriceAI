@@ -282,6 +282,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         totalRates: rateOptions.length,
         eligibleQM: scraped.eligibleQM || 0,
         eligibleNonQM: scraped.eligibleNonQM || 0,
+        debug: {
+          rawRateCount: scraped.rateCount,
+          rawRatesLength: (scraped.rates || []).length,
+          firstRawRate: (scraped.rates || [])[0] || null,
+          parsedCount: rateOptions.length,
+        },
       },
     })
   } catch (error) {
