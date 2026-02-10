@@ -196,8 +196,30 @@ function buildEvaluateScript(values: ReturnType<typeof mapFormValues>): string {
     diag.steps.push('docType_after_set: ' + docTypeEl.value + ' | selectedText: ' + (docTypeEl.selectedOptions ? docTypeEl.selectedOptions[0]?.text : 'N/A'));
   }
 
-  await sleep(500);
+  await sleep(1000);
   diag.steps.push('fields_set');
+
+  // Second field discovery AFTER setting form values (prepay fields may appear dynamically)
+  var allSelects2 = document.querySelectorAll('select');
+  var allInputs2 = document.querySelectorAll('input');
+  var formFieldsAfter = [];
+  for (var si2 = 0; si2 < allSelects2.length; si2++) {
+    var sel2 = allSelects2[si2];
+    var lbl2 = sel2.previousElementSibling ? (sel2.previousElementSibling.textContent || '').trim() : '';
+    if (!lbl2) { var par2 = sel2.parentElement; lbl2 = par2 ? (par2.querySelector('label') || {}).textContent || '' : ''; }
+    var opts2 = [];
+    for (var so2 = 0; so2 < sel2.options.length && so2 < 15; so2++) { opts2.push(sel2.options[so2].text); }
+    formFieldsAfter.push({ tag: 'SELECT', id: sel2.id, label: lbl2.substring(0, 40), value: sel2.value, options: opts2 });
+  }
+  for (var ii2 = 0; ii2 < allInputs2.length; ii2++) {
+    var inp2 = allInputs2[ii2];
+    if (inp2.type === 'hidden') continue;
+    var ilbl2 = inp2.previousElementSibling ? (inp2.previousElementSibling.textContent || '').trim() : '';
+    if (!ilbl2) { var ipar2 = inp2.parentElement; ilbl2 = ipar2 ? (ipar2.querySelector('label') || {}).textContent || '' : ''; }
+    formFieldsAfter.push({ tag: 'INPUT', id: inp2.id, type: inp2.type, label: ilbl2.substring(0, 40), value: (inp2.value || '').substring(0, 30) });
+  }
+  diag.formFieldsAfter = formFieldsAfter;
+  diag.steps.push('post_fill_fields: ' + formFieldsAfter.length + ' (before: ' + formFields.length + ')');
 
   // Click Search
   var searchBtn = document.querySelector('button.btn-primary');
