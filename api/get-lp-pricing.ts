@@ -204,6 +204,9 @@ function parseScrapedRates(rawRates: any[]): any[] {
     .sort((a: any, b: any) => a.rate - b.rate)
 }
 
+// Vercel hobby plan: extend timeout to 60s (BQL scrape takes ~20s)
+export const config = { maxDuration: 60 }
+
 // ================= Main Handler =================
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*')
