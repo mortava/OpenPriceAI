@@ -1571,9 +1571,9 @@ export default function App() {
                 // Apply -0.50 price adjustment to all LP rates before display
                 const adjustedLpRates = lpResult.rateOptions
                   .filter((opt: any) => {
-                    // Filter out Conforming programs
+                    // Filter out Conforming programs (but keep NonConforming/NonQM)
                     const prog = String(opt.program || '').toUpperCase()
-                    return !prog.includes('CONF')
+                    return !(prog.includes('CONF') && !prog.includes('NONCONF'))
                   })
                   .map((opt: any) => ({
                     ...opt,
