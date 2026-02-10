@@ -243,6 +243,14 @@ function buildEvaluateScript(values: ReturnType<typeof mapFormValues>): string {
     return div ? div.getAttribute('data') : (cell.textContent || '').trim();
   }
 
+  // Capture table headers for column discovery
+  var thEls = document.querySelectorAll('th');
+  var colHeaders = [];
+  for (var hi = 0; hi < thEls.length; hi++) {
+    colHeaders.push((thEls[hi].textContent || '').trim());
+  }
+  diag.colHeaders = colHeaders;
+
   var rows = document.querySelectorAll('tr');
   var rates = [];
   var debugRows = [];
@@ -250,18 +258,32 @@ function buildEvaluateScript(values: ReturnType<typeof mapFormValues>): string {
     var cells = rows[i].querySelectorAll('td');
     if (cells.length < 5) continue;
     var rateText = (cells[0].textContent || '').trim();
-    debugRows.push({ cellCount: cells.length, cell0: rateText.substring(0, 30) });
+    // Dump all cells for first data row
+    if (debugRows.length === 0) {
+      var allCells = [];
+      for (var ci = 0; ci < cells.length; ci++) {
+        allCells.push({ idx: ci, text: (cells[ci].textContent || '').trim().substring(0, 50), data: getData(cells[ci]) });
+      }
+      debugRows.push({ cellCount: cells.length, allCells: allCells });
+    } else if (debugRows.length < 3) {
+      debugRows.push({ cellCount: cells.length, cell0: rateText.substring(0, 30) });
+    }
     var rateMatch = rateText.match(/([\\d.]+)\\s*%/);
     if (!rateMatch) continue;
     rates.push({
       rate: parseFloat(rateMatch[1]),
       price: getData(cells[2]),
       payment: getData(cells[3]),
-      priceAdj: getData(cells[9])
+      apr: getData(cells[4]),
+      program: (cells[5] ? (cells[5].textContent || '').trim() : ''),
+      status: (cells[6] ? (cells[6].textContent || '').trim() : ''),
+      investor: (cells[7] ? (cells[7].textContent || '').trim() : ''),
+      priceAdj: getData(cells[9]),
+      rateAdj: getData(cells[10])
     });
   }
 
-  diag.debugRows = debugRows.slice(0, 5);
+  diag.debugRows = debugRows;
 
   // Get eligible counts
   var pageText = document.body.innerText || '';
@@ -286,11 +308,18 @@ function parseScrapedRates(rawRates: any[]): any[] {
       const priceStr = String(r.price).replace(/[^0-9.-]/g, '')
       const paymentStr = String(r.payment).replace(/[^0-9.-]/g, '')
       const adjStr = String(r.priceAdj).replace(/[^0-9.-]/g, '')
+      const aprStr = String(r.apr || '').replace(/[^0-9.-]/g, '')
+      const rateAdjStr = String(r.rateAdj || '').replace(/[^0-9.-]/g, '')
       return {
         rate: r.rate,
         price: parseFloat(priceStr) || 0,
         payment: parseFloat(paymentStr) || 0,
+        apr: parseFloat(aprStr) || 0,
+        program: r.program || '',
+        status: r.status || '',
+        investor: r.investor || '',
         totalAdjustments: parseFloat(adjStr) || 0,
+        rateAdjustments: parseFloat(rateAdjStr) || 0,
       }
     })
     .sort((a: any, b: any) => a.rate - b.rate)

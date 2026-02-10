@@ -1,0 +1,144 @@
+API BASE
+Domain: https://api.digitallending.com
+Base Path: /rest/v1/lp-ppe-integration/public/pricing/
+
+ENDPOINT 1: Lock Days
+GET /rest/v1/lp-ppe-integration/public/pricing/lock-days
+Query params: code=Oaktree&company=oaktree.digitallending.com
+Response: [30, 45] — simple integer array of available lock day options.
+
+ENDPOINT 2: Pricing Search
+POST /rest/v1/lp-ppe-integration/public/pricing/search?company=oaktree.digitallending.com
+Content-Type: application/json
+
+REQUEST PAYLOAD STRUCTURE
+Top-level keys:
+KeyTypeDescriptiondatenullPricing date (null = today)companyIdstring"646e553bce8ad00001423634"codestring"Oaktree"criteriaobjectCore loan scenario inputspropertyobjectProperty detailsbrokerCriteriaobjectBroker/comp plan settingsrateRangeobjectRate range filteraccessCriteriaobjectMarketplace search flagsfilterobjectProgram/product code filtersmiCriteriaobjectMI criteria settingsclosingCostobjectClosing cost configurationdynamicPropertiesMapobjectLender-specific custom fieldsgroupConfigobjectResult tree grouping configdayLocksCriteriaarray[30]termsCriteriaarray[30]loanPurposeCriteriaarray["Purchase"]loanTypeCriteriaarray["Fixed"]showDisqualifybooleantrueshowDisqualifyRulesbooleantrueskipAdjustmentsbooleanfalsemaxListingPerRatenumber-1 (unlimited)dynaToSmobooleantruedisqualifyAsyncbooleantruefillLenderMapbooleantrue
+criteria object:
+FieldTypeExampleMaps to UIpurchasePricenumber800000Purchase Price / Est. ValueloanAmountnumber600000Loan AmountloanYearnumber30Term (Years)loanPurposestring"Purchase"Loan PurposeloanTypestring"Fixed"Amortization TypemortgageTypesarray["Conventional"]Mortgage TypepropertyUsestring"Investment"Occupancyficonumber760FICOltvnumber0.75LTV (calculated)dscrnumber1DSCR RatioselfEmployedstring"true"Self Employed checkboxinterestOnlybooleanfalseInterest Only checkboxescrowWaiverbooleanfalseWaive ImpoundslenderFeeWaiverbooleanfalseBuy Out Lender FeelienPriorityTypestring"FirstLien"Lien PositioncompensationTypestring"LenderCompPlan"Comp plan typemonthlyIncomenumber16667Used for DTI calcmonthlyDebtnumber5333Used for DTI calcclientDtinumber0.3199...DTI %numberOfBorrowerstring"1"Number of borrowerspmiTypestring"None"PMI typedownPaymentAmountnumber0Down paymentspecialMortgageOptionsarray[{id, name}]Auto-populated from form selectionsincomeAmiRationumber1.762...Income to AMI ratioaminumber113500Area Median Income
+property object:
+json{
+  "address": {
+    "censustract": "06037",
+    "city": "Beverly Hills",
+    "zip": "90210",
+    "state": "CA",
+    "county": "06037",
+    "countyName": "Los Angeles",
+    "country": "US"
+  },
+  "propertyType": "SingleFamily",
+  "numberOfUnit": 1,
+  "attachmentType": "Detached"
+}
+dynamicPropertiesMap (lender-specific fields):
+Each entry is { fieldId: string, value: string }:
+fieldIdDescriptionExample ValueCitizenshipBorrower citizenship"US Citizen"IncomeDocTypeIncome documentation type"DSCR"DSCRRATIODSCR ratio bucket"DSCR>=1"AddlOccupancyTypeOccupancy sub-type"Long_Term_Rental_Property"GLOBAL_BorrowerTypeBorrower entity type"Individual"GLOBAL_GIFTFUNDPERCENTGift fund percentage"0"GLOBAL_MixedUseMixed use flag(empty)GLOBAL_PartnershipLLCLLC vesting(empty)OAKTREE_CROSSCOLLATERALIZEDCross-collateralized"false"FirstTimeInvestorFirst time investor(empty)PrepayTermPrepayment penalty term"None"MORT30LATESLAST12M30-day lates in 12 months"0"MORT60LATESLAST12M60-day lates in 12 months"0"MORT90LATESLAST12M90-day lates in 12 months"0"MORT120LATESLAST12M120-day lates in 12 months"0"
+groupConfig (controls result tree structure):
+json{
+  "paths": [
+    { "group": "CriteriaFromLineResultKey", "groupSort": "LoanTypeAndTerm" },
+    { "group": "RateKey", "groupSort": "KeyAsc" },
+    { "group": "LenderKey", "groupSort": "KeyAsc" }
+  ],
+  "leafSort": "Point",
+  "backendGrouping": true
+}
+```
+
+---
+
+### RESPONSE STRUCTURE
+
+**Top-level response keys:**
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `id` | string | Pricing session ID |
+| `provider` | object | `{ code: "LenderPrice" }` |
+| `status` | object | `{ code: "New" }` |
+| `search` | object | Echo of search metadata with date |
+| `results` | object | **Main results container** |
+| `closingCost` | null | Top-level closing cost |
+
+**`results` object:**
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `qualifiedQMData` | tree | QM-eligible results (tree structure) |
+| `qualifiedNonQMData` | tree | Non-QM eligible results (tree structure) |
+| `disqualifiedData` | tree | Disqualified results (tree structure) |
+| `qualifiedQMLenders` | map | `{ "lenderName": "lenderId" }` |
+| `qualifiedNonQMLenders` | map | `{ "Oaktree Funding Corp.": "55a82802..." }` |
+| `disqualifiedLenders` | map | Disqualified lenders |
+| `programs` | array | `["30 YR FIXED INVESTOR ADVANTAGE", "30 YR FIXED PLATINUM ADVANTAGE"]` |
+| `lenderDtos` | object | Detailed lender info split by QM/NonQM/Disq |
+| `sponsoredLenders` | object | Sponsored lender data |
+| `nextClosestRate` | object | Next closest rate info |
+
+---
+
+### RESULT TREE STRUCTURE (how to traverse)
+
+The result data is a **nested tree** with 4 levels:
+```
+ROOT (keyLabel: "ROOT")
+ └── Program Group (keyLabel: "30 Years Fixed Conventional Purchase")
+      ├── type: "CriteriaFromLineResultKey"
+      ├── key: ["Fixed", "30 Years", "Purchase", "Conventional", "600000.0", ""]
+      └── childs[] → Rate Nodes
+           ├── type: "RateKey"  
+           ├── keyLabel: "6.125" (the rate %)
+           └── childs[] → Lender Nodes
+                ├── type: "LenderKey"
+                ├── keyLabel: "Oaktree Funding Corp."
+                └── leafs[] → **PRICING LEAF** (the actual rate data)
+
+PRICING LEAF — All 137 Fields
+The leaf is the actual rate row data. Here are the fields organized by UI category:
+Core Display Fields (maps to your results table columns):
+UI ColumnLeaf FieldExampleNotesRaterate6.125Interest rate %LendercompanyName"Oaktree Funding Corp."Price100 - adjustedPoints98.125Calculated: 100 minus adjustedPointsPaymentmonthlyPayment.monthlyPI3645.66Monthly P&ICost to BorrowerfinalClosingCost13200Total costComp.PlanlenderPaidOnlyComp0Lender paid comp
+Rate/Points Breakdown:
+FieldTypeExampleDescriptionratenumber6.125Note raterawRatesnumber6.125Raw rate before adjustmentsbaseRatesnumber6.125Base rateadjustedRatesnumber6.125Rate after adjustmentsadjustmentRatesnumber0Rate adjustment amountbasePointsnumber-0.375Base pricing pointsrawBasePointsnumber-0.375Raw base pointsadjustedPointsnumber1.875Final adjusted pointsadjustmentPointsnumber2.25Total LLPA adjustmentsborrowerPaidPointsnumber1.875Borrower-paid pointsdiscountPointsnumber1.875Discount pointsundiscountedRatenumber6.625Rate without discountstartedAdjustedRatenumber6.625Starting adjusted rate
+Payment Details:
+jsonmonthlyPayment: {
+  "monthlyPI": 3645.66,      // Principal & Interest
+  "totalPrincipal": 600000,
+  "totalInterest": 712440.93,
+  "propertyTaxes": 0,
+  "homeOwnerInsurance": 0,
+  "mi": 0,
+  "total": 3645.66
+}
+monthlyPayments is an array of amortization period breakdowns (start/end months with rates).
+Cost Fields:
+FieldTypeExampleborrowerPaidnumber11250borrowerPaidAmountnumber11250lenderPaidnumber11250lenderPaidOnlyCompnumber0lenderPaidOnlyCompDollarAmountnumber0borrowerPaidMinusCompnumber1.875borrowerPaidMinusCompDollarAmountnumber11250finalClosingCostnumber13200finalSubClosingCostnumber0totalLenderFeesnumber1950totalOriginationFeenumber0originationCreditnumber1.875cashToCloseAmountnumber0bonafideAmountnumber0
+Loan/Borrower Info:
+FieldTypeExampleficonumber760dscrnumber1ltvnumber0.75cltvnumber0.75dtinumber0.53871htinumber0.21874loanAmountnumber600000totalLoanAmountnumber600000termnumber30dayLocknumber30mortgageTypestring"Conventional"loanPurposestring"Purchase"loanTypestring"Fixed"amortTypestring""termInfostring"30 Years"isInterestOnlybooleanfalseinterestOnlyAmountnumber3062.5pmiTypestring"None"
+APR/Compliance:
+FieldTypeExampleaprnumber6.3353notRoundedAPRnumber6.335apornumber6.06qmPercentagenumber1.875finalQmPercentagenumber0finalQmClosingCostsnumber11250qualifyingRatePercentnumber6.125
+Program/Lender Identity:
+FieldTypeExampleprogramNamestring"30 YR FIXED INVESTOR ADVANTAGE"productNamestring"30 YR FIXED INVESTOR ADVANTAGE"companyNamestring"Oaktree Funding Corp."companyIdstring"55a82802e4b0a3fb4342ffb9"rateGridNamestring"30 YR FIXED INVESTOR ADVANTAGE"rateGridIdstring"6812a69b8407740001054782"
+Status/Flags:
+FieldTypeExampledisqualifiedbooleanfalseexpiredbooleanfalseinterpolatedbooleanfalsehideDisqualifiedbooleanfalselenderFeeWaiverbooleanfalsehighBalanceIndicatorbooleantrueappraisalWaiverIndicatorbooleanfalse
+Complex Sub-objects on each leaf:
+
+closingCost — full closing cost breakdown with groups
+closingCostDetails — array of line-item fee details (description, points, amount, type)
+lenderPaidDetails — array of lender-paid fee breakdowns
+borrowerPaidDetails — array of borrower-paid fee breakdowns
+holdBackResult — broker/lender conditions, qualifications, disqualifications
+rateProgram — { id, name, externalName, applyParRounding }
+rateGrid — detailed grid metadata (id, name, mortgage types, terms, etc.)
+ratePeriod — { id, name, rateType, validAsOf, ... }
+monthlyPayments — amortization schedule array
+overrideLLPA — { pointAdjs, rateAdjs, executionType }
+conditionActions — array of condition actions
+athenaFees — array of additional fees
+cashToCloseItems — array of cash-to-close items
+
+
+SAMPLE: Full Rate Table (all 32 rates returned)
+Rates range from 6.125% to 10.0% in 0.125% increments. The price (100 - adjustedPoints) goes from 98.125 at 6.125% up to 100.000 at par (6.625%) and beyond for premium pricing at higher rates.
+
+This gives you everything you need to structure the results into your own UI. The key formula to remember is Price Display = 100 - adjustedPoints, and the tree traversal is ROOT → Program Group → Rate → Lender → Leaf. Let me know if you need me to dig into any specific sub-object further!

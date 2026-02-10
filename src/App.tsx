@@ -487,12 +487,36 @@ export default function App() {
       dscrValue: isDSCR ? calculatedDSCR.ratio : undefined
     }
 
-    // Fire ML immediately, LP in background (LP takes ~15-20s via headless browser)
+    // Fire ML + LP in PARALLEL (LP takes ~20-30s via headless browser)
+    const bodyJson = JSON.stringify(requestBody)
+
+    // LP fires immediately — no waiting for ML
+    fetch('/api/get-lp-pricing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: bodyJson,
+    })
+      .then(r => r.json())
+      .then(lpData => {
+        console.log('[LP] rates:', lpData.data?.rateOptions?.length || 0)
+        if (lpData.success && lpData.data) {
+          setLpResult(lpData.data)
+        } else {
+          setLpResult({ rateOptions: [], error: lpData.error || 'No rates returned' })
+        }
+      })
+      .catch(err => {
+        console.error('[LP] Error:', err)
+        setLpResult({ rateOptions: [], error: 'LP pricing unavailable' })
+      })
+      .finally(() => setLpLoading(false))
+
+    // ML fires in parallel
     try {
       const mlResponse = await fetch('/api/get-pricing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
+        body: bodyJson,
       })
       const mlData = await mlResponse.json()
 
@@ -511,28 +535,6 @@ export default function App() {
     } finally {
       setIsLoading(false)
     }
-
-    // LP runs independently in background — results appear when ready
-    const lpBody = JSON.stringify(requestBody)
-    fetch('/api/get-lp-pricing', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: lpBody,
-    })
-      .then(r => {
-        console.log('[LP] Response status:', r.status)
-        return r.json()
-      })
-      .then(lpData => {
-        console.log('[LP] Data received:', lpData.success, 'rates:', lpData.data?.rateOptions?.length || 0, 'debug:', lpData.data?.debug)
-        if (lpData.success && lpData.data) {
-          setLpResult(lpData.data)
-        } else {
-          console.log('[LP] No data:', JSON.stringify(lpData).substring(0, 500))
-        }
-      })
-      .catch(err => console.error('[LP] Error:', err))
-      .finally(() => setLpLoading(false))
   }
 
   const hasError = (field: keyof LoanData) => !!validationErrors[field]
@@ -1569,61 +1571,78 @@ export default function App() {
                 </Card>
               )}
 
-              {lpResult && lpResult.rateOptions && lpResult.rateOptions.length > 0 && (
-                <Card className="mt-4 border-indigo-200 bg-indigo-50/30">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base flex items-center justify-between">
-                      <span>Additional Market Rates</span>
-                      <span className="text-xs font-normal text-gray-400">{lpResult.rateOptions.length} rates</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-gray-500 border-b">
-                            <th className="text-right py-2 px-3">Rate</th>
-                            <th className="text-right py-2 px-3">Price</th>
-                            <th className="text-right py-2 px-3">Payment</th>
-                            <th className="text-right py-2 px-3">APR</th>
-                            <th className="text-right py-2 px-3">Total Adj.</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {lpResult.rateOptions
-                            .filter((opt: any) => opt.price >= 99.0 && opt.price <= 101.0)
-                            .map((opt: any, idx: number) => {
-                              const isClosest = Math.abs(opt.price - 100) ===
-                                Math.min(...lpResult.rateOptions
-                                  .filter((o: any) => o.price >= 99.0 && o.price <= 101.0)
-                                  .map((o: any) => Math.abs(o.price - 100)))
-                              return (
-                                <tr key={idx} className={`border-t ${isClosest ? 'bg-blue-50' : ''}`}>
-                                  <td className="py-2 px-3 text-right font-semibold text-primary">
-                                    {safeNumber(opt.rate).toFixed(3)}%
-                                  </td>
-                                  <td className={`py-2 px-3 text-right ${opt.price >= 100 ? 'text-green-600 font-medium' : ''}`}>
-                                    {safeNumber(opt.price).toFixed(3)}
-                                  </td>
-                                  <td className="py-2 px-3 text-right font-medium">
-                                    {opt.payment > 0 ? formatCurrency(safeNumber(opt.payment)) : '-'}
-                                  </td>
-                                  <td className="py-2 px-3 text-right">
-                                    {opt.apr ? `${safeNumber(opt.apr).toFixed(3)}%` : '-'}
-                                  </td>
-                                  <td className="py-2 px-3 text-right">
-                                    {opt.totalAdjustments !== 0 ? (
-                                      <span className={opt.totalAdjustments > 0 ? 'text-red-600' : 'text-green-600'}>
-                                        {opt.totalAdjustments > 0 ? '+' : ''}{safeNumber(opt.totalAdjustments).toFixed(3)}
-                                      </span>
-                                    ) : '-'}
-                                  </td>
-                                </tr>
-                              )
-                            })}
-                        </tbody>
-                      </table>
-                    </div>
+              {lpResult && lpResult.rateOptions && lpResult.rateOptions.length > 0 && (() => {
+                const filteredLpRates = lpResult.rateOptions.filter((opt: any) => opt.price >= 99.0 && opt.price <= 101.0)
+                const closestPrice = filteredLpRates.length > 0
+                  ? Math.min(...filteredLpRates.map((o: any) => Math.abs(o.price - 100)))
+                  : 999
+                return (
+                  <Card className="mt-4 border-indigo-200 bg-indigo-50/30">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base flex items-center justify-between">
+                        <span>Additional Market Rates</span>
+                        <span className="text-xs font-normal text-gray-400">
+                          {filteredLpRates.length} of {lpResult.rateOptions.length} rates
+                          {lpResult.eligibleQM > 0 && ` | ${lpResult.eligibleQM} QM`}
+                          {lpResult.eligibleNonQM > 0 && ` | ${lpResult.eligibleNonQM} Non-QM`}
+                        </span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {filteredLpRates.length > 0 ? (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="text-gray-500 border-b">
+                                <th className="text-right py-2 px-3">Rate</th>
+                                <th className="text-right py-2 px-3">Price</th>
+                                <th className="text-right py-2 px-3">Mo. Payment</th>
+                                <th className="text-right py-2 px-3">Price Adj.</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filteredLpRates.map((opt: any, idx: number) => {
+                                const isClosest = Math.abs(opt.price - 100) === closestPrice
+                                return (
+                                  <tr key={idx} className={`border-t ${isClosest ? 'bg-blue-50 font-medium' : ''}`}>
+                                    <td className="py-2 px-3 text-right font-semibold text-primary">
+                                      {safeNumber(opt.rate).toFixed(3)}%
+                                    </td>
+                                    <td className={`py-2 px-3 text-right ${opt.price >= 100 ? 'text-green-600 font-medium' : ''}`}>
+                                      {safeNumber(opt.price).toFixed(3)}
+                                    </td>
+                                    <td className="py-2 px-3 text-right">
+                                      {opt.payment > 0 ? formatCurrency(safeNumber(opt.payment)) : '-'}
+                                    </td>
+                                    <td className="py-2 px-3 text-right">
+                                      {opt.totalAdjustments !== 0 ? (
+                                        <span className={opt.totalAdjustments > 0 ? 'text-red-600' : 'text-green-600'}>
+                                          {opt.totalAdjustments > 0 ? '+' : ''}{safeNumber(opt.totalAdjustments).toFixed(3)}
+                                        </span>
+                                      ) : '-'}
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-400 text-center py-2">
+                          {lpResult.rateOptions.length} rates returned, none in 99-101 price range
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })()}
+
+              {!lpLoading && lpResult && (!lpResult.rateOptions || lpResult.rateOptions.length === 0) && (
+                <Card className="mt-4 border-gray-200">
+                  <CardContent className="py-4">
+                    <p className="text-sm text-gray-400 text-center">
+                      No additional market rates available for this scenario
+                    </p>
                   </CardContent>
                 </Card>
               )}

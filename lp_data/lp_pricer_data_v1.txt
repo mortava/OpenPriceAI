@@ -1,0 +1,25 @@
+###LP Integrations
+
+*
+/rest/v1/lp-ppe-integration/public/pricing/
+├── search      (POST) — submits loan scenario, returns rate results
+└── lock-days   (GET)  — retrieves available lock day period
+-
+#Base API Domain - Do not use will give a 404 message (https://api.digitallending.com)
+
+#Primary API Endpoints (Lender Price PPE Integration) 
+1. Pricing Search - Main Rate Engine URL: 
+https://api.digitallending.com/rest/v1/lp-ppe-integration/public/pricing/search?company=oaktree.digitallending.com
+-
+|-Method: POST
+|-Status: 200
+|-Purpose: This is the main call — it sends the form data as a JSON payload and returns the rate/pricing results 
+
+
+2. Lock Days Lookup URL: 
+https://api.digitallending.com/rest/v1/lp-ppe-integration/public/pricing/lock-days?code=Oaktree&company=oaktree.digitallending.com
+-
+|-Method: GET
+|-Query Params: code=Oaktree, company=oaktree.digitallending.com
+|-Status: 200
+|-Purpose: Fetches the available lock day options. This is called multiple times — once before the search and again after results return.

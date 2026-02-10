@@ -1,0 +1,18 @@
+##Analytics / Tracking Endpoints
+3. Segment Analytics Tracking
+URL: https://api.segment.io/v1/t — Track events (POST, called 6 times)
+URL: https://api.segment.io/v1/m — Metrics/page events (POST, called 2 times)
+Purpose: User behavior tracking — fires on form interactions, search submission, and results rendering.
+
+
+#Call Sequence (Flow)
+|-User clicks Search
+|--GET /rest/v1/lp-ppe-integration/public/pricing/lock-days — refreshes lock day data
+|---POST /rest/v1/lp-ppe-integration/public/pricing/search — sends the full loan scenario JSON
+|----Segment tracking calls fire (/v1/t and /v1/m)
+|-----GET /rest/v1/lp-ppe-integration/public/pricing/lock-days — called again after results render
+|------Results display in the UI
+
+
+//# Lookup NOTES <-ai ignore->Notable Console Errors, The app also threw several script errors related to dynamicPropertiesMap properties (BankruptcyChapter, Lateinlast12months, Lateinlast24months) being undefined — these are configuration scripts that fail when those optional fields aren't present in the form scenario. These don't block the search but indicate the pricing engine config expects those dynamic properties even when they're hidden from the UI.
+Want me to dig deeper into the actual JSON request/response payload structure for the search POST call? ///
