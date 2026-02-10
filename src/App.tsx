@@ -1550,29 +1550,25 @@ export default function App() {
                   </Card>
                 )}
 
-              {/* Submit Loan Button */}
-              <div className="mt-6">
-                <a href="https://sub.defywholesale.com/" target="_blank" rel="noopener noreferrer" className="block">
-                  <Button type="button" size="lg" className="w-full bg-green-600 hover:bg-green-700 text-white">
-                    <ExternalLink className="w-4 h-4 mr-2" />Submit + Lock
-                  </Button>
-                </a>
-              </div>
-
-              {/* ADDITIONAL MARKET RATES - Lender Price (anonymized) */}
+              {/* EXPANDED MARKET RATES - Lender Price (above Submit button) */}
               {lpLoading && !lpResult && (
                 <Card className="mt-4 border-gray-200">
                   <CardContent className="py-6">
                     <div className="flex items-center justify-center gap-3 text-gray-500">
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span className="text-sm">Fetching additional market rates...</span>
+                      <span className="text-sm">Fetching expanded market rates...</span>
                     </div>
                   </CardContent>
                 </Card>
               )}
 
               {lpResult && lpResult.rateOptions && lpResult.rateOptions.length > 0 && (() => {
-                const filteredLpRates = lpResult.rateOptions.filter((opt: any) => opt.price >= 99.0 && opt.price <= 101.0)
+                // Apply -0.50 price adjustment to all LP rates before display
+                const adjustedLpRates = lpResult.rateOptions.map((opt: any) => ({
+                  ...opt,
+                  price: safeNumber(opt.price) - 0.50,
+                }))
+                const filteredLpRates = adjustedLpRates.filter((opt: any) => opt.price >= 99.0 && opt.price <= 101.0)
                 const closestPrice = filteredLpRates.length > 0
                   ? Math.min(...filteredLpRates.map((o: any) => Math.abs(o.price - 100)))
                   : 999
@@ -1580,9 +1576,9 @@ export default function App() {
                   <Card className="mt-4 border-indigo-200 bg-indigo-50/30">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-base flex items-center justify-between">
-                        <span>Additional Market Rates</span>
+                        <span>Expanded Market Rates</span>
                         <span className="text-xs font-normal text-gray-400">
-                          {filteredLpRates.length} of {lpResult.rateOptions.length} rates
+                          {filteredLpRates.length} of {adjustedLpRates.length} rates
                           {lpResult.eligibleQM > 0 && ` | ${lpResult.eligibleQM} QM`}
                           {lpResult.eligibleNonQM > 0 && ` | ${lpResult.eligibleNonQM} Non-QM`}
                         </span>
@@ -1594,11 +1590,10 @@ export default function App() {
                           <table className="w-full text-sm">
                             <thead>
                               <tr className="text-gray-500 border-b">
-                                <th className="text-right py-2 px-2">Rate</th>
-                                <th className="text-right py-2 px-2">Price</th>
-                                <th className="text-right py-2 px-2">Payment</th>
-                                <th className="text-left py-2 px-2">Program</th>
-                                <th className="text-right py-2 px-2">Price Adj.</th>
+                                <th className="text-right py-2 px-3">Rate</th>
+                                <th className="text-right py-2 px-3">Price</th>
+                                <th className="text-right py-2 px-3">Payment</th>
+                                <th className="text-right py-2 px-3">Price Adj.</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1606,19 +1601,16 @@ export default function App() {
                                 const isClosest = Math.abs(opt.price - 100) === closestPrice
                                 return (
                                   <tr key={idx} className={`border-t ${isClosest ? 'bg-blue-50 font-medium' : ''}`}>
-                                    <td className="py-2 px-2 text-right font-semibold text-primary">
+                                    <td className="py-2 px-3 text-right font-semibold text-primary">
                                       {safeNumber(opt.rate).toFixed(3)}%
                                     </td>
-                                    <td className={`py-2 px-2 text-right ${opt.price >= 100 ? 'text-green-600 font-medium' : ''}`}>
+                                    <td className={`py-2 px-3 text-right ${opt.price >= 100 ? 'text-green-600 font-medium' : ''}`}>
                                       {safeNumber(opt.price).toFixed(3)}
                                     </td>
-                                    <td className="py-2 px-2 text-right">
+                                    <td className="py-2 px-3 text-right">
                                       {opt.payment > 0 ? formatCurrency(safeNumber(opt.payment)) : '-'}
                                     </td>
-                                    <td className="py-2 px-2 text-left text-xs text-gray-500 truncate max-w-[180px]" title={opt.program}>
-                                      {opt.program || '-'}
-                                    </td>
-                                    <td className="py-2 px-2 text-right">
+                                    <td className="py-2 px-3 text-right">
                                       {opt.totalAdjustments !== 0 ? (
                                         <span className={opt.totalAdjustments > 0 ? 'text-red-600' : 'text-green-600'}>
                                           {opt.totalAdjustments > 0 ? '+' : ''}{safeNumber(opt.totalAdjustments).toFixed(3)}
@@ -1633,7 +1625,7 @@ export default function App() {
                         </div>
                       ) : (
                         <p className="text-sm text-gray-400 text-center py-2">
-                          {lpResult.rateOptions.length} rates returned, none in 99-101 price range
+                          {adjustedLpRates.length} rates returned, none in 99-101 price range
                         </p>
                       )}
                     </CardContent>
@@ -1645,11 +1637,20 @@ export default function App() {
                 <Card className="mt-4 border-gray-200">
                   <CardContent className="py-4">
                     <p className="text-sm text-gray-400 text-center">
-                      No additional market rates available for this scenario
+                      No expanded market rates available for this scenario
                     </p>
                   </CardContent>
                 </Card>
               )}
+
+              {/* Submit Loan Button */}
+              <div className="mt-6">
+                <a href="https://sub.defywholesale.com/" target="_blank" rel="noopener noreferrer" className="block">
+                  <Button type="button" size="lg" className="w-full bg-green-600 hover:bg-green-700 text-white">
+                    <ExternalLink className="w-4 h-4 mr-2" />Submit + Lock
+                  </Button>
+                </a>
+              </div>
               </>
             ) : isLoading ? (
               <div className="py-16 flex flex-col items-center justify-center">
