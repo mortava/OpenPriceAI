@@ -144,16 +144,35 @@ function buildEvaluateScript(values: ReturnType<typeof mapFormValues>): string {
 
   await sleep(2000);
 
-  // Dismiss cookie consent banner if present
-  var cookieBtns = document.querySelectorAll('button');
-  for (var cb = 0; cb < cookieBtns.length; cb++) {
-    var btnText = (cookieBtns[cb].textContent || '').trim().toLowerCase();
-    if (btnText === 'allow cookies' || btnText === 'accept' || btnText === 'accept all') {
-      cookieBtns[cb].click();
-      diag.steps.push('cookie_dismissed: ' + btnText);
+  // Dismiss cookie consent banner - try multiple strategies
+  var dismissed = false;
+
+  // Strategy 1: Click any element containing "allow cookies" text
+  var allElements = document.querySelectorAll('button, a, div, span');
+  for (var cb = 0; cb < allElements.length; cb++) {
+    var elText = (allElements[cb].textContent || '').trim().toLowerCase();
+    if (elText === 'allow cookies' || elText === 'accept' || elText === 'accept all' || elText === 'allow') {
+      allElements[cb].click();
+      diag.steps.push('cookie_clicked: ' + elText + ' (' + allElements[cb].tagName + ')');
+      dismissed = true;
       break;
     }
   }
+
+  // Strategy 2: Set common cookie consent cookies directly
+  document.cookie = 'CookieConsent=true; path=/; max-age=31536000';
+  document.cookie = 'cookieconsent_status=allow; path=/; max-age=31536000';
+  document.cookie = 'cc_cookie={%22categories%22:[%22necessary%22,%22analytics%22,%22marketing%22]}; path=/; max-age=31536000';
+
+  // Strategy 3: Remove cookie banner from DOM if it exists
+  var banners = document.querySelectorAll('.cc-window, .cookie-consent, .cookie-banner, [class*=cookie], [id*=cookie]');
+  for (var bi = 0; bi < banners.length; bi++) {
+    banners[bi].style.display = 'none';
+    diag.steps.push('cookie_banner_hidden: ' + banners[bi].className.substring(0, 50));
+  }
+
+  if (!dismissed) diag.steps.push('cookie_no_button_found');
+
   await sleep(1500);
 
   // Check if page loaded
