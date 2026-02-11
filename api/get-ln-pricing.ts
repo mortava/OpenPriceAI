@@ -496,38 +496,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       var jsResp = await fetch(mainUrl);
       var jsText = await jsResp.text();
 
-      // Search for multiple patterns to find the data model
-      var searches = ['baseLoanAmount', 'loanAmount', 'propertyValue', 'purchasePrice', 'loanPurpose', 'nexApp', 'NexApp', 'creditScore', 'fico'];
+      // Search for updateNexAppFromForm to find all field names
+      var searches = ['updateNexAppFromForm', 'loanPurpose', 'occupancy', 'propertyType', 'documentationType', 'incomeDocType', 'lockDays', 'lockPeriod', 'dscrRatio', 'dscr', 'state', 'county', 'loanType', 'loanProgram', '.getQuickPrices('];
       var findings = {};
       for (var s = 0; s < searches.length; s++) {
         var term = searches[s];
         var idx = jsText.indexOf(term);
         if (idx >= 0) {
-          findings[term] = jsText.substring(Math.max(0, idx - 200), Math.min(jsText.length, idx + 300));
+          findings[term] = jsText.substring(Math.max(0, idx - 300), Math.min(jsText.length, idx + 500));
         }
       }
 
-      // Also search for the quick-price call site (where getQuickPrices is invoked)
-      var callIdx = jsText.indexOf('.getQuickPrices(');
-      if (callIdx >= 0) {
-        findings['getQuickPrices_call'] = jsText.substring(Math.max(0, callIdx - 500), Math.min(jsText.length, callIdx + 500));
+      // Search for all nexApp. field assignments
+      var nexAppFields = [];
+      var regex = /nexApp\.(\w+)/g;
+      var match;
+      var seen = {};
+      while ((match = regex.exec(jsText)) !== null && nexAppFields.length < 100) {
+        if (!seen[match[1]]) {
+          seen[match[1]] = true;
+          nexAppFields.push(match[1]);
+        }
       }
+      findings['allNexAppFields'] = nexAppFields.join(', ');
 
       jsDiscovery = { findings: findings };
-      diag.steps.push('js_search_done: ' + Object.keys(findings).length + ' matches');
+      diag.steps.push('js_search_done: ' + nexAppFields.length + ' nexApp fields found');
 
-      // Also test the API with data wrapper
+      // Test API with correct field names
       var apiUrl = 'https://nexapi.loannex.com/loans/apps/' + userGuid + '/quick-prices';
       var testBody = {
         data: {
-          baseLoanAmount: 450000,
-          propertyValue: 600000,
-          creditScore: 740,
-          loanPurpose: 'Purchase',
-          occupancyType: 'Investment',
-          propertyType: 'SingleFamily',
+          loanAmount: 450000,
+          appraisedValue: 600000,
+          purchasePrice: 600000,
+          fico: 740,
           state: 'CA',
-          zipCode: '90210'
+          zipCode: '90210',
+          loanPurpose: 'Purchase',
+          occupancyType: 'InvestmentProperty',
+          propertyType: 'SingleFamily'
         }
       };
       var resp = await fetch(apiUrl, {
@@ -536,7 +544,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         body: JSON.stringify(testBody)
       });
       var respText = await resp.text();
-      apiResult = { status: resp.status, body: respText.substring(0, 2000) };
+      apiResult = { status: resp.status, body: respText.substring(0, 3000) };
       diag.steps.push('api_test: ' + resp.status);
     } catch(e) {
       diag.steps.push('error: ' + e.message);
