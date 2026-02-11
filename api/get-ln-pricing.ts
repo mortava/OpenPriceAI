@@ -122,12 +122,54 @@ function buildDiscoveryScript(): string {
     });
   }
 
+  // Discover links / navigation
+  var links = document.querySelectorAll('a[href]');
+  var linkList = [];
+  for (var l = 0; l < links.length && l < 30; l++) {
+    var linkText = (links[l].textContent || '').trim();
+    if (linkText.length > 0 && linkText.length < 60) {
+      linkList.push({
+        text: linkText,
+        href: links[l].getAttribute('href').substring(0, 120),
+        className: (links[l].className || '').substring(0, 60)
+      });
+    }
+  }
+
+  // Check for iframes (Loannex may embed the pricer in an iframe)
+  var iframes = document.querySelectorAll('iframe');
+  var iframeList = [];
+  for (var fi = 0; fi < iframes.length; fi++) {
+    iframeList.push({
+      src: (iframes[fi].src || '').substring(0, 200),
+      id: iframes[fi].id || '',
+      name: iframes[fi].name || '',
+      width: iframes[fi].width,
+      height: iframes[fi].height
+    });
+  }
+
+  // Full page HTML structure (divs with IDs/classes)
+  var mainDivs = document.querySelectorAll('div[id], div[class*=container], div[class*=panel], div[class*=content], div[class*=app], div[class*=page], div[class*=main], nav');
+  var structureList = [];
+  for (var di = 0; di < mainDivs.length && di < 30; di++) {
+    structureList.push({
+      tag: mainDivs[di].tagName,
+      id: mainDivs[di].id || '',
+      className: (mainDivs[di].className || '').substring(0, 80),
+      childCount: mainDivs[di].children.length
+    });
+  }
+
   // Page structure
-  var bodyText = (document.body.innerText || '').substring(0, 1000);
+  var bodyText = (document.body.innerText || '').substring(0, 2000);
 
   return JSON.stringify({
     fields: fields,
     buttons: btnList,
+    links: linkList,
+    iframes: iframeList,
+    structure: structureList,
     bodyPreview: bodyText,
     fieldCount: fields.length,
     buttonCount: btnList.length,
