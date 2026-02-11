@@ -471,48 +471,66 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     btnList.push({ tag: buttons[b].tagName, text: (buttons[b].textContent || '').trim().substring(0, 50), id: buttons[b].id || '', className: (buttons[b].className || '').substring(0, 80) });
   }
 
-  // Click hamburger menu to reveal sidebar navigation
-  var toggleBtn = document.getElementById('btnNav');
-  if (toggleBtn) {
-    diag.steps.push('clicking_hamburger_menu');
-    toggleBtn.click();
-    await sleep(2000);
-  }
-
-  // Capture auth token (JWT)
+  // Capture auth token (JWT) and user info
   var authInfo = {};
+  var jwt = '';
+  var userGuid = '';
   try {
     var authResult = localStorage.getItem('authentication-result');
     if (authResult) {
       var parsed = JSON.parse(authResult);
-      authInfo.jwt = (parsed.authenticationToken || '').substring(0, 50) + '...';
-      authInfo.jwtFull = parsed.authenticationToken || '';
+      jwt = parsed.authenticationToken || '';
+      authInfo.jwtPrefix = jwt.substring(0, 50) + '...';
     }
-    authInfo.userGuid = (localStorage.getItem('userGuid') || '').replace(/"/g, '');
+    userGuid = (localStorage.getItem('userGuid') || '').replace(/"/g, '');
+    authInfo.userGuid = userGuid;
     authInfo.orgGuid = (localStorage.getItem('organizationGuid') || '').replace(/"/g, '');
   } catch(e) { authInfo.error = e.message; }
 
-  // Scan ALL elements for navigation text after hamburger opened
-  var allElements = document.querySelectorAll('*');
-  var linkList = [];
-  var seenTexts = {};
-  for (var ne = 0; ne < allElements.length && ne < 8000; ne++) {
-    var el2 = allElements[ne];
-    // Only look at leaf or shallow elements
-    if (el2.children.length <= 2) {
-      var t = (el2.textContent || '').trim();
-      if (t.length > 1 && t.length < 50 && !seenTexts[t]) {
-        seenTexts[t] = true;
-        var clickable = el2.onclick || el2.getAttribute('routerlink') || el2.getAttribute('ng-reflect-router-link') || (el2.tagName === 'A' && el2.href);
-        if (clickable || el2.style.cursor === 'pointer' || (el2.className && el2.className.indexOf && (el2.className.indexOf('menu') >= 0 || el2.className.indexOf('nav') >= 0 || el2.className.indexOf('link') >= 0 || el2.className.indexOf('item') >= 0 || el2.className.indexOf('sidebar') >= 0))) {
-          linkList.push({ text: t, tag: el2.tagName, className: (el2.className || '').substring(0, 80), routerLink: (el2.getAttribute('routerlink') || el2.getAttribute('ng-reflect-router-link') || '') });
-        }
-      }
+  // Test API call with JWT - try a minimal body to discover required format
+  var apiResult = null;
+  if (jwt && userGuid) {
+    diag.steps.push('testing_api_call');
+    try {
+      var apiUrl = 'https://nexapi.loannex.com/loans/apps/' + userGuid + '/quick-prices';
+      var testBody = {
+        loanAmount: 450000,
+        propertyValue: 600000,
+        creditScore: 740,
+        loanPurpose: 'Purchase',
+        occupancyType: 'Investment',
+        propertyType: 'Single Family',
+        state: 'CA',
+        zipCode: '90210',
+        documentationType: 'DSCR'
+      };
+      var resp = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + jwt
+        },
+        body: JSON.stringify(testBody)
+      });
+      var respText = await resp.text();
+      apiResult = {
+        status: resp.status,
+        statusText: resp.statusText,
+        body: respText.substring(0, 3000),
+        headers: {}
+      };
+      resp.headers.forEach(function(v, k) { apiResult.headers[k] = v.substring(0, 100); });
+      diag.steps.push('api_status: ' + resp.status);
+    } catch(e) {
+      apiResult = { error: e.message };
+      diag.steps.push('api_error: ' + e.message);
     }
   }
 
-  var bodyText = (document.body.innerText || '').substring(0, 3000);
-  return JSON.stringify({ fields: fields, buttons: btnList, navLinks: linkList, authInfo: authInfo, bodyPreview: bodyText, fieldCount: fields.length, diag: diag });
+  var linkList = [];
+
+  var bodyText = (document.body.innerText || '').substring(0, 1000);
+  return JSON.stringify({ authInfo: authInfo, apiResult: apiResult, fieldCount: fields.length, diag: diag });
 })()`
 
     // Single BQL call with 5 steps:
