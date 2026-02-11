@@ -575,7 +575,7 @@ export default function App() {
         setLnResult({ rateOptions: [], error: data.error || 'No rates returned' })
       }
     } catch (err) {
-      setLnResult({ rateOptions: [], error: 'Loannex pricing unavailable' })
+      setLnResult({ rateOptions: [], error: 'PPE pricing unavailable' })
     } finally {
       setLnLoading(false)
     }
@@ -1747,7 +1747,7 @@ export default function App() {
                         <Lock className="w-5 h-5 text-amber-400" />
                       </div>
                       <p className="text-sm font-medium text-amber-200">Additional Pricing Source Available</p>
-                      <p className="text-xs text-slate-400">Enter access code to view Loannex rates</p>
+                      <p className="text-xs text-slate-400">Enter access code to view additional rates</p>
                       <div className="flex items-center gap-2 mt-1">
                         <Input
                           type="password"
@@ -1781,7 +1781,7 @@ export default function App() {
                         <Globe className="w-8 h-8 text-purple-400 animate-pulse" />
                         <div className="absolute -top-1 -right-1 w-3 h-3 bg-purple-400 rounded-full animate-ping" />
                       </div>
-                      <span className="text-sm text-slate-300 font-medium tracking-wide">Fetching Loannex pricing...</span>
+                      <span className="text-sm text-slate-300 font-medium tracking-wide">Searching OpenBroker AI PPE...</span>
                       <div className="flex gap-1 mt-1">
                         <div className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                         <div className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -1803,7 +1803,7 @@ export default function App() {
                         </div>
                         <div>
                           <CardTitle className="text-base font-semibold text-white tracking-tight">
-                            Loannex - Wholesale Rate Results
+                            OpenBroker AI PPE - Wholesale Rate Results
                           </CardTitle>
                         </div>
                       </div>
@@ -1858,7 +1858,7 @@ export default function App() {
                     <div className="flex flex-col items-center gap-2">
                       <Globe className="w-5 h-5 text-purple-400/50" />
                       <p className="text-sm text-slate-400 text-center">
-                        {lnResult.error || 'No Loannex rates available for this scenario'}
+                        {lnResult.error || 'No rates available for this scenario'}
                       </p>
                       <Button type="button" size="sm" variant="outline" onClick={fetchLnPricing} className="mt-2 border-purple-600/40 text-purple-300 hover:bg-purple-600/10">
                         Retry
