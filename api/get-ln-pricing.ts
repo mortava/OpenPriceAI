@@ -496,32 +496,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       var jsResp = await fetch(mainUrl);
       var jsText = await jsResp.text();
 
-      // Use JWT to call API directly - no page navigation needed
+      // Use JWT to call API directly
       var apiBase = 'https://nexapi.loannex.com';
+      var orgGuid = (localStorage.getItem('organizationGuid') || '').replace(/"/g, '');
       var authHeaders = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + jwt };
 
-      // Test 1: GET exception-buyers (see what investors/programs exist)
-      var buyersResp = null;
+      // Test 1: GET programs-products (see what programs are configured)
+      var progsResp = null;
       try {
-        var resp1 = await fetch(apiBase + '/users/' + userGuid + '/exception-buyers', { headers: authHeaders });
-        buyersResp = { status: resp1.status, body: (await resp1.text()).substring(0, 1500) };
-        diag.steps.push('buyers: ' + resp1.status);
-      } catch(e) { buyersResp = { error: e.message }; }
+        var resp1 = await fetch(apiBase + '/lookups/organizations/' + orgGuid + '/programs-products', { headers: authHeaders });
+        progsResp = { status: resp1.status, body: (await resp1.text()).substring(0, 3000) };
+        diag.steps.push('progs: ' + resp1.status);
+      } catch(e) { progsResp = { error: e.message }; }
 
-      // Test 2: POST quick-prices with empty data (see validation errors)
-      var emptyResp = null;
+      // Test 2: GET counties (to verify state value format)
+      var countiesResp = null;
       try {
-        var resp2 = await fetch(apiBase + '/loans/apps/' + userGuid + '/quick-prices', {
-          method: 'POST', headers: authHeaders, body: JSON.stringify({ data: {} })
-        });
-        emptyResp = { status: resp2.status, body: (await resp2.text()).substring(0, 1500) };
-        diag.steps.push('empty: ' + resp2.status);
-      } catch(e) { emptyResp = { error: e.message }; }
+        var resp2 = await fetch(apiBase + '/lookups/counties?stateValue=CA', { headers: authHeaders });
+        countiesResp = { status: resp2.status, body: (await resp2.text()).substring(0, 1000) };
+        diag.steps.push('counties: ' + resp2.status);
+      } catch(e) { countiesResp = { error: e.message }; }
 
-      // Test 3: POST with corrected DSCR enum + all field names
-      var fullResp = null;
+      // Test 3: POST quick-prices with query params + filter
+      var pricingResp = null;
       try {
-        var resp3 = await fetch(apiBase + '/loans/apps/' + userGuid + '/quick-prices', {
+        var resp3 = await fetch(apiBase + '/loans/apps/' + userGuid + '/quick-prices?worstCasePricing=false', {
           method: 'POST', headers: authHeaders,
           body: JSON.stringify({
             data: {
@@ -546,21 +545,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               numberOfFinancedProperties: 1,
               prePaymentPenaltyTermInMonths: 60,
               citizenship: 'UsCitizen',
-              buydownType: null,
-              creditEvent: null,
-              cashOutAmount: 0,
-              secondLein: 0,
-              totalPostClosingLiquidAssets: 0,
-              helocDrawnAmount: 0,
-              helocLineAmount: 0
+              filter: { rule: 'BestByInvestor', targetPrice: 100 }
             }
           })
         });
-        fullResp = { status: resp3.status, body: (await resp3.text()).substring(0, 3000) };
-        diag.steps.push('full: ' + resp3.status);
-      } catch(e) { fullResp = { error: e.message }; }
+        pricingResp = { status: resp3.status, body: (await resp3.text()).substring(0, 3000) };
+        diag.steps.push('pricing: ' + resp3.status);
+      } catch(e) { pricingResp = { error: e.message }; }
 
-      jsDiscovery = { buyersResp: buyersResp, emptyResp: emptyResp, fullResp: fullResp };
+      jsDiscovery = { progsResp: progsResp, countiesResp: countiesResp, pricingResp: pricingResp };
     } catch(e) {
       diag.steps.push('error: ' + e.message);
     }
