@@ -128,15 +128,69 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
       var signInBtn = document.querySelector('button.login-button') || document.querySelector('button');
       if (signInBtn) { signInBtn.click(); diag.steps.push('login_clicked'); }
 
-      // Wait for pricing form to load after login
-      for (var li = 0; li < 12; li++) {
-        await sleep(1500);
-        var inputs2 = document.querySelectorAll('input:not([type=hidden])');
-        if (inputs2.length > 10) {
-          diag.steps.push('form_after_login_at: ' + ((li+1)*1.5) + 's, fields: ' + inputs2.length);
-          formReady = true;
-          break;
+      // Wait for app to load after login
+      await sleep(3000);
+      diag.steps.push('post_login_url: ' + window.location.href);
+
+      // Check if we landed on Quick Pricer or elsewhere
+      var bodyText = (document.body.innerText || '');
+      var hasQuickPricer = bodyText.indexOf('Get Price') >= 0;
+      diag.steps.push('has_get_price: ' + hasQuickPricer);
+
+      if (!hasQuickPricer) {
+        // Try to find and click Quick Pricer navigation
+        var navClicked = false;
+        var allEls = document.querySelectorAll('a, button, span, div, li, [role=menuitem]');
+        for (var ne = 0; ne < allEls.length; ne++) {
+          var navText = (allEls[ne].textContent || '').trim().toLowerCase();
+          if (navText === 'quick pricer' || navText === 'quick price' || navText === 'add scenario' || navText === 'pricing') {
+            diag.steps.push('clicking_nav: ' + (allEls[ne].textContent || '').trim());
+            allEls[ne].click();
+            navClicked = true;
+            break;
+          }
         }
+        if (!navClicked) {
+          // Try hamburger/sidebar menu first
+          var menuBtn = document.querySelector('[class*=hamburger], [class*=menu-toggle], [class*=sidebar-toggle], .pi-bars');
+          if (menuBtn) { menuBtn.click(); diag.steps.push('opened_menu'); await sleep(800); }
+          // Search again after menu opened
+          allEls = document.querySelectorAll('a, button, span, div, li, [role=menuitem]');
+          for (var ne2 = 0; ne2 < allEls.length; ne2++) {
+            var navText2 = (allEls[ne2].textContent || '').trim().toLowerCase();
+            if (navText2 === 'quick pricer' || navText2 === 'quick price' || navText2 === 'add scenario' || navText2 === 'pricing') {
+              diag.steps.push('clicking_nav_after_menu: ' + (allEls[ne2].textContent || '').trim());
+              allEls[ne2].click();
+              navClicked = true;
+              break;
+            }
+          }
+        }
+
+        if (navClicked) {
+          // Wait for Quick Pricer form to load after navigation
+          for (var qi = 0; qi < 10; qi++) {
+            await sleep(1500);
+            var qpBody = (document.body.innerText || '');
+            if (qpBody.indexOf('Get Price') >= 0) {
+              diag.steps.push('quick_pricer_loaded_at: ' + ((qi+1)*1.5) + 's');
+              formReady = true;
+              break;
+            }
+          }
+        } else {
+          // Dump nav items for debugging
+          var navDebug = [];
+          var navEls = document.querySelectorAll('a, [role=menuitem], [class*=nav-item], [class*=menu-item]');
+          for (var nd = 0; nd < navEls.length && nd < 15; nd++) {
+            var ndText = (navEls[nd].textContent || '').trim();
+            if (ndText.length > 0 && ndText.length < 40) navDebug.push(ndText);
+          }
+          diag.navItems = navDebug;
+          diag.steps.push('no_quick_pricer_nav');
+        }
+      } else {
+        formReady = true;
       }
       break;
     }
