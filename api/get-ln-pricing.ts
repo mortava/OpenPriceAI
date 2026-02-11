@@ -1,86 +1,20 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 const BROWSERLESS_URL = 'https://production-sfo.browserless.io/chromium/bql'
-const LOANNEX_URL = 'https://web.loannex.com/iframe/loadiframe?_id=&page=nex-app'
-const NEXAPI_BASE = 'https://nexapi.loannex.com'
+const LOANNEX_LOGIN_URL = 'https://web.loannex.com/'
 
 export const config = { maxDuration: 60 }
 
-// ================= Field Mapping =================
-function mapFormToNexApp(body: any): Record<string, any> {
-  const purposeMap: Record<string, string> = {
-    purchase: 'Purchase',
-    refinance: 'NoCashOutRefinance',
-    cashout: 'CashOutRefinance',
-  }
-  const occupancyMap: Record<string, string> = {
-    primary: 'PrimaryResidence',
-    secondary: 'SecondaryResidence',
-    investment: 'Investment',
-  }
-  const propertyMap: Record<string, string> = {
-    sfr: 'SingleFamily',
-    condo: 'Condominium',
-    townhouse: 'Townhouse',
-    '2unit': 'TwoUnit',
-    '3unit': 'ThreeUnit',
-    '4unit': 'FourUnit',
-    '5-9unit': 'FiveToNineUnit',
-  }
-  const docTypeMap: Record<string, string> = {
-    fullDoc: 'FullDocumentation',
-    dscr: 'DebtServiceCoverageRatio',
-    bankStatement: 'BankStatements12MoPersonal',
-    assetDepletion: 'AssetUtilization',
-    voe: 'VOE',
-    noRatio: 'NoRatio',
-  }
-  const citizenshipMap: Record<string, string> = {
-    usCitizen: 'UsCitizen',
-    permanentResident: 'UsCitizen',
-    foreignNational: 'ForeignNational',
-  }
-
-  const loanAmount = Number(String(body.loanAmount || 0).replace(/,/g, ''))
-  const propertyValue = Number(String(body.propertyValue || 0).replace(/,/g, ''))
-  const prepayMonths = parseInt(body.prepayPeriod) || 0
-
-  return {
-    loanAmount,
-    appraisedValue: propertyValue,
-    purchasePrice: body.loanPurpose === 'purchase' ? propertyValue : 0,
-    fico: Number(body.creditScore) || 740,
-    state: body.propertyState || 'CA',
-    county: body.propertyCounty || '',
-    zipCode: body.propertyZip || '',
-    purpose: purposeMap[body.loanPurpose] || 'Purchase',
-    occupancy: occupancyMap[body.occupancyType] || 'Investment',
-    propertyType: propertyMap[body.propertyType] || 'SingleFamily',
-    incomeDocumentation: docTypeMap[body.documentationType] || 'FullDocumentation',
-    numberOfUnits: 1,
-    escrow: body.impoundType === '0' ? 'Yes' : 'No',
-    isFirstTimeHomebuyer: body.isFTHB || false,
-    isFirstTimeInvestor: false,
-    isShortTermRental: body.isShortTermRental || false,
-    isRuralProperty: body.isRuralProperty || false,
-    isSelfEmployed: body.isSelfEmployed || false,
-    numberOfFinancedProperties: 1,
-    prePaymentPenaltyTermInMonths: prepayMonths,
-    citizenship: citizenshipMap[body.citizenship] || 'UsCitizen',
-    lockPeriod: Number(body.lockPeriod) || 30,
-    filter: { rule: 'BestByInvestor', targetPrice: 100 },
-  }
-}
-
-// ================= BQL Scripts =================
+// ================= Login Script (wrapper site) =================
 function buildLoginScript(email: string, password: string): string {
   return `(async function() {
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   await sleep(1500);
+  var diag = { url: window.location.href, title: document.title };
   var userInput = document.getElementById('UserName');
   var passwordInput = document.getElementById('Password');
   var loginBtn = document.getElementById('btnSubmit');
-  if (!userInput || !passwordInput) return JSON.stringify({ ok: false, error: 'no_form' });
+  if (!userInput || !passwordInput) return JSON.stringify({ ok: false, error: 'no_form', diag: diag });
   function setInput(el, val) {
     el.focus();
     var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
@@ -97,101 +31,179 @@ function buildLoginScript(email: string, password: string): string {
 })()`
 }
 
-function buildNavToIframeScript(): string {
+// ================= Discovery Script (main site after login) =================
+function buildDiscoverMainSiteScript(): string {
   return `(async function() {
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-  await sleep(2000);
-  var iframes = document.getElementsByTagName('iframe');
-  var iframe = null;
-  for (var i = 0; i < iframes.length; i++) {
-    if (iframes[i].src && iframes[i].src.indexOf('loannex') >= 0) { iframe = iframes[i]; break; }
-    if (iframes[i].src && iframes[i].src.indexOf('nex-app') >= 0) { iframe = iframes[i]; break; }
+  var diag = { steps: [] };
+
+  // Wait for page to load after login redirect
+  await sleep(3000);
+  diag.steps.push('url: ' + window.location.href);
+  diag.steps.push('title: ' + document.title);
+
+  // Check for iframes (the pricing form might be in an iframe)
+  var iframes = document.querySelectorAll('iframe');
+  var iframeList = [];
+  for (var fi = 0; fi < iframes.length; fi++) {
+    iframeList.push({
+      src: (iframes[fi].src || '').substring(0, 200),
+      id: iframes[fi].id || '',
+      name: iframes[fi].name || '',
+      width: iframes[fi].width || iframes[fi].offsetWidth,
+      height: iframes[fi].height || iframes[fi].offsetHeight
+    });
   }
-  if (!iframe && iframes.length > 0) iframe = iframes[0];
-  if (iframe && iframe.src && iframe.src.length > 10) {
-    window.location.href = iframe.src;
-    await sleep(500);
-    return JSON.stringify({ ok: true });
+  diag.steps.push('iframes: ' + iframes.length);
+
+  // Discover ALL form elements on the main page
+  var elements = document.querySelectorAll('input, select, textarea, [role="combobox"], [role="listbox"]');
+  var fields = [];
+  for (var i = 0; i < elements.length; i++) {
+    var el = elements[i];
+    if (el.type === 'hidden') continue;
+    var label = '';
+    var labelEl = el.closest('label') || document.querySelector('label[for="' + el.id + '"]');
+    if (labelEl) label = (labelEl.textContent || '').trim();
+    if (!label && el.previousElementSibling) label = (el.previousElementSibling.textContent || '').trim();
+    if (!label && el.parentElement) {
+      var sib = el.parentElement.querySelector('label, .label, span');
+      if (sib && sib !== el) label = (sib.textContent || '').trim();
+    }
+    var opts;
+    if (el.tagName === 'SELECT') {
+      opts = [];
+      for (var j = 0; j < el.options.length && j < 25; j++) opts.push({ v: el.options[j].value, t: el.options[j].text });
+    }
+    fields.push({
+      tag: el.tagName, id: el.id || '', name: el.name || '', type: el.type || '',
+      label: label.substring(0, 60), placeholder: el.placeholder || '',
+      value: (el.value || '').substring(0, 40),
+      className: (el.className || '').substring(0, 80),
+      options: opts
+    });
   }
-  if (window.location.href.indexOf('webapp.loannex') >= 0) {
-    return JSON.stringify({ ok: true, alreadyOnApp: true });
+
+  // Discover buttons
+  var buttons = document.querySelectorAll('button, input[type=submit], a.btn, [role="button"]');
+  var btnList = [];
+  for (var b = 0; b < buttons.length && b < 30; b++) {
+    btnList.push({
+      tag: buttons[b].tagName, text: (buttons[b].textContent || '').trim().substring(0, 50),
+      id: buttons[b].id || '', className: (buttons[b].className || '').substring(0, 80)
+    });
   }
-  return JSON.stringify({ ok: false, error: 'no_iframe' });
+
+  // Discover links/navigation
+  var links = document.querySelectorAll('a[href]');
+  var linkList = [];
+  for (var l = 0; l < links.length && l < 40; l++) {
+    var lt = (links[l].textContent || '').trim();
+    if (lt.length > 0 && lt.length < 60) {
+      linkList.push({ text: lt, href: links[l].getAttribute('href').substring(0, 120) });
+    }
+  }
+
+  // Body text preview
+  var bodyText = (document.body.innerText || '').substring(0, 3000);
+
+  return JSON.stringify({
+    fields: fields, fieldCount: fields.length,
+    buttons: btnList, buttonCount: btnList.length,
+    links: linkList, iframes: iframeList,
+    bodyPreview: bodyText,
+    diag: diag
+  });
 })()`
 }
 
-function buildAngularLoginAndPriceScript(email: string, password: string, nexAppPayload: string): string {
+// ================= Form Fill + Scrape Script =================
+function buildFillAndScrapeScript(formValues: Record<string, any>): string {
+  const valJson = JSON.stringify(formValues)
   return `(async function() {
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-  var result = { step: 'init' };
+  var diag = { steps: [] };
+  var vals = ${valJson};
 
-  // Poll for Angular login form
-  var usernameField = null;
-  var passwordField = null;
-  for (var w = 0; w < 10; w++) {
-    await sleep(1500);
-    usernameField = document.getElementById('username');
-    passwordField = document.getElementById('password');
-    if (usernameField && passwordField) break;
-  }
+  await sleep(3000);
+  diag.steps.push('url: ' + window.location.href);
 
-  if (usernameField && passwordField) {
-    function setInput(el, val) {
+  // Helper to set form values
+  function setVal(id, val) {
+    var el = document.getElementById(id) || document.querySelector('[name="' + id + '"]');
+    if (!el) { diag.steps.push('NOT_FOUND: ' + id); return false; }
+    if (el.tagName === 'SELECT') {
+      el.value = val;
+      el.dispatchEvent(new Event('change', {bubbles: true}));
+    } else {
       el.focus();
-      el.value = '';
-      el.dispatchEvent(new Event('focus', {bubbles: true}));
-      var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      var setter = Object.getOwnPropertyDescriptor(
+        el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype,
+        'value'
+      ).set;
       if (setter) setter.call(el, val);
       el.dispatchEvent(new Event('input', {bubbles: true}));
       el.dispatchEvent(new Event('change', {bubbles: true}));
       el.dispatchEvent(new Event('blur', {bubbles: true}));
     }
-    setInput(usernameField, '${email}');
-    await sleep(300);
-    setInput(passwordField, '${password}');
-    await sleep(300);
-    var signInBtn = document.querySelector('button.login-button') || document.querySelector('button');
-    if (signInBtn) signInBtn.click();
-    result.step = 'login_clicked';
+    diag.steps.push('SET: ' + id + ' = ' + val);
+    return true;
+  }
 
-    // Wait for login to complete (dashboard loads)
-    for (var i = 0; i < 15; i++) {
-      await sleep(1500);
-      var jwt = '';
-      try {
-        var authResult = localStorage.getItem('authentication-result');
-        if (authResult) { jwt = JSON.parse(authResult).authenticationToken || ''; }
-      } catch(e) {}
-      if (jwt) { result.step = 'authenticated'; break; }
+  // Fill form fields (selectors TBD from discovery)
+  var keys = Object.keys(vals);
+  for (var k = 0; k < keys.length; k++) {
+    setVal(keys[k], vals[keys[k]]);
+    await sleep(100);
+  }
+
+  // Click search/price button (selector TBD)
+  var searchBtn = document.querySelector('#btnSearch') ||
+    document.querySelector('button[type=submit]') ||
+    document.querySelector('input[type=submit]');
+  if (searchBtn) {
+    diag.steps.push('clicking: ' + (searchBtn.id || searchBtn.textContent || '').substring(0, 30));
+    searchBtn.click();
+  } else {
+    diag.steps.push('no_search_button');
+  }
+
+  // Wait for results table
+  for (var attempt = 0; attempt < 20; attempt++) {
+    await sleep(1500);
+    var rows = document.querySelectorAll('table tr, .results-row, [class*=result]');
+    if (rows.length > 3) {
+      diag.steps.push('results_at: ' + ((attempt+1)*1.5) + 's, rows: ' + rows.length);
+      break;
     }
   }
+  await sleep(1000);
 
-  // Extract JWT and user info
-  var jwt = '';
-  var userGuid = '';
-  try {
-    var authResult = localStorage.getItem('authentication-result');
-    if (authResult) jwt = JSON.parse(authResult).authenticationToken || '';
-    userGuid = (localStorage.getItem('userGuid') || '').replace(/"/g, '');
-  } catch(e) {}
-
-  if (!jwt || !userGuid) {
-    return JSON.stringify({ success: false, error: 'auth_failed', step: result.step });
+  // Scrape results table
+  var tables = document.querySelectorAll('table');
+  var rates = [];
+  for (var ti = 0; ti < tables.length; ti++) {
+    var trs = tables[ti].querySelectorAll('tr');
+    if (trs.length < 2) continue;
+    // Get headers
+    var ths = trs[0].querySelectorAll('th, td');
+    var headers = [];
+    for (var h = 0; h < ths.length; h++) headers.push((ths[h].textContent || '').trim());
+    // Get data rows
+    for (var ri = 1; ri < trs.length && ri < 50; ri++) {
+      var tds = trs[ri].querySelectorAll('td');
+      if (tds.length < 3) continue;
+      var row = {};
+      for (var ci = 0; ci < tds.length && ci < headers.length; ci++) {
+        row[headers[ci] || 'col' + ci] = (tds[ci].textContent || '').trim();
+      }
+      rates.push(row);
+    }
+    if (rates.length > 0) break; // use first table with data
   }
 
-  // Call the pricing API
-  var nexAppData = ${nexAppPayload};
-  try {
-    var resp = await fetch('${NEXAPI_BASE}/loans/apps/' + userGuid + '/quick-prices?worstCasePricing=false', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + jwt },
-      body: JSON.stringify({ data: nexAppData })
-    });
-    var body = await resp.text();
-    return JSON.stringify({ success: true, status: resp.status, body: body });
-  } catch(e) {
-    return JSON.stringify({ success: false, error: e.message, step: 'api_call' });
-  }
+  diag.steps.push('scraped: ' + rates.length + ' rows');
+  return JSON.stringify({ success: true, rates: rates, diag: diag });
 })()`
 }
 
@@ -210,24 +222,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const loannexUser = process.env.LOANNEX_USER || ''
   const loannexPassword = process.env.LOANNEX_PASSWORD || ''
-  if (!loannexUser || !loannexPassword) return res.json({ success: false, error: 'Loannex credentials not configured' })
+  if (!loannexUser || !loannexPassword) return res.json({ success: false, error: 'Credentials not configured' })
+
+  const isDiscovery = req.query.discover === 'true'
 
   try {
-    const body = req.body || {}
-    const nexAppData = mapFormToNexApp(body)
-    const nexAppPayload = JSON.stringify(nexAppData)
-
     const loginScript = buildLoginScript(loannexUser, loannexPassword)
     const waitScript = `(async function() { await new Promise(r => setTimeout(r, 5000)); return JSON.stringify({ ok: true }); })()`
-    const navScript = buildNavToIframeScript()
-    const priceScript = buildAngularLoginAndPriceScript(loannexUser, loannexPassword, nexAppPayload)
 
-    const bqlQuery = `mutation LoginAndPrice {
-  loginPage: goto(url: "${LOANNEX_URL}", waitUntil: networkIdle) { status time }
+    let mainScript: string
+    if (isDiscovery) {
+      mainScript = buildDiscoverMainSiteScript()
+    } else {
+      // TODO: map form fields after discovery reveals selectors
+      mainScript = buildDiscoverMainSiteScript() // temp: discovery for now
+    }
+
+    // 3-step BQL: goto login → fill+click → wait for redirect → discover/scrape main site
+    const bqlQuery = `mutation LoginAndDiscover {
+  loginPage: goto(url: "${LOANNEX_LOGIN_URL}", waitUntil: networkIdle) { status time }
   login: evaluate(content: ${JSON.stringify(loginScript)}, timeout: 8000) { value }
   waitForRedirect: evaluate(content: ${JSON.stringify(waitScript)}, timeout: 8000) { value }
-  navToAngular: evaluate(content: ${JSON.stringify(navScript)}, timeout: 10000) { value }
-  price: evaluate(content: ${JSON.stringify(priceScript)}, timeout: 35000) { value }
+  main: evaluate(content: ${JSON.stringify(mainScript)}, timeout: 40000) { value }
 }`
 
     const bqlResp = await fetch(`${BROWSERLESS_URL}?token=${browserlessToken}`, {
@@ -239,77 +255,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!bqlResp.ok) {
       const errText = await bqlResp.text()
-      return res.json({ success: false, error: `Browserless error: ${bqlResp.status}`, debug: errText.substring(0, 300) })
+      return res.json({ success: false, error: `Browserless: ${bqlResp.status}`, debug: errText.substring(0, 300) })
     }
 
     const bqlResult = await bqlResp.json()
 
     if (bqlResult.errors && !bqlResult.data) {
-      return res.json({ success: false, error: 'BQL execution error' })
+      return res.json({ success: false, error: 'BQL error', debug: bqlResult.errors })
     }
 
-    // Parse the pricing result from step 5
-    let priceData: any = null
+    // Parse main step result
+    let mainData: any = null
     try {
-      const raw = bqlResult.data?.price?.value
-      priceData = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : null
-    } catch { priceData = null }
+      const raw = bqlResult.data?.main?.value
+      mainData = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : null
+    } catch { mainData = null }
 
-    if (!priceData || !priceData.success) {
-      return res.json({
-        success: false,
-        error: priceData?.error || 'Failed to get pricing from Loannex',
-        step: priceData?.step || 'unknown',
-      })
-    }
-
-    // Parse the Loannex API response
-    let apiData: any = null
-    try {
-      apiData = typeof priceData.body === 'string' ? JSON.parse(priceData.body) : priceData.body
-    } catch { apiData = null }
-
-    if (!apiData || apiData.status !== 'Success') {
-      return res.json({
-        success: false,
-        error: 'Loannex API returned error',
-        apiStatus: apiData?.status,
-      })
-    }
-
-    // Transform prices into rate options
-    const lnData = apiData.data || {}
-    const prices = lnData.prices || []
-    const programs = lnData.programs || []
-    const investors = lnData.investors || []
-
-    const rateOptions = prices.map((p: any) => ({
-      rate: p.rate || 0,
-      price: p.price || 0,
-      payment: p.payment || 0,
-      points: p.points || 0,
-      apr: p.apr || 0,
-      program: p.programName || p.programCode || '',
-      investor: p.investorName || '',
-      lockPeriod: p.lockPeriod || 0,
-      status: p.status || '',
-    }))
+    const loginData = (() => {
+      try {
+        const raw = bqlResult.data?.login?.value
+        return raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : null
+      } catch { return null }
+    })()
 
     return res.json({
       success: true,
-      data: {
-        rateOptions,
-        programCount: programs.length,
-        investorCount: investors.length,
-        totalPrices: prices.length,
-        hasIneligible: lnData.hasIneligiblePrograms || false,
-      },
+      mode: isDiscovery ? 'discovery' : 'pricing',
+      login: loginData,
+      data: mainData,
+      debug: { keys: Object.keys(bqlResult.data || {}), errors: bqlResult.errors || null }
     })
   } catch (error) {
     console.error('LN pricing error:', error)
     return res.json({
       success: false,
-      error: error instanceof Error ? error.message : 'Loannex pricing unavailable',
+      error: error instanceof Error ? error.message : 'Pricing unavailable',
     })
   }
 }
