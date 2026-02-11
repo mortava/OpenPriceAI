@@ -487,50 +487,80 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     authInfo.orgGuid = (localStorage.getItem('organizationGuid') || '').replace(/"/g, '');
   } catch(e) { authInfo.error = e.message; }
 
-  // Test API call with JWT - try a minimal body to discover required format
+  // Find the API request format by examining Angular app's JS source
   var apiResult = null;
+  var jsDiscovery = null;
   if (jwt && userGuid) {
-    diag.steps.push('testing_api_call');
+    diag.steps.push('searching_js_bundles');
     try {
-      var apiUrl = 'https://nexapi.loannex.com/loans/apps/' + userGuid + '/quick-prices';
-      var testBody = {
-        loanAmount: 450000,
-        propertyValue: 600000,
-        creditScore: 740,
-        loanPurpose: 'Purchase',
-        occupancyType: 'Investment',
-        propertyType: 'Single Family',
-        state: 'CA',
-        zipCode: '90210',
-        documentationType: 'DSCR'
-      };
-      var resp = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + jwt
-        },
-        body: JSON.stringify(testBody)
-      });
-      var respText = await resp.text();
-      apiResult = {
-        status: resp.status,
-        statusText: resp.statusText,
-        body: respText.substring(0, 3000),
-        headers: {}
-      };
-      resp.headers.forEach(function(v, k) { apiResult.headers[k] = v.substring(0, 100); });
-      diag.steps.push('api_status: ' + resp.status);
+      // Find all script tags and look for API request format
+      var scripts = document.querySelectorAll('script[src]');
+      var scriptUrls = [];
+      for (var si = 0; si < scripts.length; si++) {
+        scriptUrls.push(scripts[si].src);
+      }
+      diag.scripts = scriptUrls;
+
+      // Fetch the main bundle and search for quick-price related code
+      var found = false;
+      for (var si = 0; si < scriptUrls.length && !found; si++) {
+        var url = scriptUrls[si];
+        if (url.indexOf('main') >= 0 || url.indexOf('app') >= 0 || url.indexOf('chunk') >= 0) {
+          try {
+            var jsResp = await fetch(url);
+            var jsText = await jsResp.text();
+            // Search for quick-prices or quick-price related patterns
+            var idx = jsText.indexOf('quick-prices');
+            if (idx < 0) idx = jsText.indexOf('quick-price');
+            if (idx < 0) idx = jsText.indexOf('quickPrice');
+            if (idx >= 0) {
+              // Extract surrounding code (5000 chars around the match)
+              var start = Math.max(0, idx - 2500);
+              var end = Math.min(jsText.length, idx + 2500);
+              jsDiscovery = {
+                url: url,
+                matchAt: idx,
+                context: jsText.substring(start, end)
+              };
+              found = true;
+              diag.steps.push('found_api_code_in: ' + url.split('/').pop());
+            }
+          } catch(e) {
+            diag.steps.push('fetch_error: ' + url.split('/').pop() + ' ' + e.message);
+          }
+        }
+      }
+      if (!found) {
+        // Try all scripts
+        for (var si = 0; si < scriptUrls.length && !found; si++) {
+          try {
+            var jsResp = await fetch(scriptUrls[si]);
+            var jsText = await jsResp.text();
+            var idx = jsText.indexOf('quick-prices');
+            if (idx < 0) idx = jsText.indexOf('quickPrice');
+            if (idx >= 0) {
+              var start = Math.max(0, idx - 2500);
+              var end = Math.min(jsText.length, idx + 2500);
+              jsDiscovery = {
+                url: scriptUrls[si],
+                matchAt: idx,
+                context: jsText.substring(start, end)
+              };
+              found = true;
+              diag.steps.push('found_in_bundle: ' + scriptUrls[si].split('/').pop());
+            }
+          } catch(e) {}
+        }
+      }
+      if (!found) diag.steps.push('api_code_not_found_in_bundles');
     } catch(e) {
-      apiResult = { error: e.message };
-      diag.steps.push('api_error: ' + e.message);
+      diag.steps.push('js_search_error: ' + e.message);
     }
   }
 
   var linkList = [];
 
-  var bodyText = (document.body.innerText || '').substring(0, 1000);
-  return JSON.stringify({ authInfo: authInfo, apiResult: apiResult, fieldCount: fields.length, diag: diag });
+  return JSON.stringify({ authInfo: authInfo, jsDiscovery: jsDiscovery, diag: diag });
 })()`
 
     // Single BQL call with 5 steps:
