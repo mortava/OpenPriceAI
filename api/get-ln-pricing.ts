@@ -372,13 +372,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   var diag = { steps: [] };
   diag.steps.push('url: ' + window.location.href);
 
-  // Wait for Angular app to load
-  await sleep(3000);
+  // Poll for Angular app to bootstrap and render login form or pricing form
+  var usernameField = null;
+  var passwordField = null;
+  for (var w = 0; w < 10; w++) {
+    await sleep(1500);
+    usernameField = document.getElementById('username');
+    passwordField = document.getElementById('password');
+    var allInputs = document.querySelectorAll('input:not([type=hidden]), select, textarea');
+    if (usernameField && passwordField) {
+      diag.steps.push('login_form_at: ' + ((w+1)*1.5) + 's');
+      break;
+    }
+    if (allInputs.length > 5) {
+      diag.steps.push('pricing_form_at: ' + ((w+1)*1.5) + 's, fields: ' + allInputs.length);
+      break;
+    }
+  }
   diag.steps.push('title: ' + document.title);
-
-  // Check if we're on Angular login page
-  var usernameField = document.getElementById('username');
-  var passwordField = document.getElementById('password');
 
   if (usernameField && passwordField) {
     diag.steps.push('angular_login_detected');
