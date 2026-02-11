@@ -487,80 +487,65 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     authInfo.orgGuid = (localStorage.getItem('organizationGuid') || '').replace(/"/g, '');
   } catch(e) { authInfo.error = e.message; }
 
-  // Find the API request format by examining Angular app's JS source
-  var apiResult = null;
+  // Search JS bundles for NexApp model / field names
   var jsDiscovery = null;
+  var apiResult = null;
   if (jwt && userGuid) {
-    diag.steps.push('searching_js_bundles');
     try {
-      // Find all script tags and look for API request format
-      var scripts = document.querySelectorAll('script[src]');
-      var scriptUrls = [];
-      for (var si = 0; si < scripts.length; si++) {
-        scriptUrls.push(scripts[si].src);
-      }
-      diag.scripts = scriptUrls;
+      var mainUrl = 'https://webapp.loannex.com/main.c8784b76aa7f3603.js';
+      var jsResp = await fetch(mainUrl);
+      var jsText = await jsResp.text();
 
-      // Fetch the main bundle and search for quick-price related code
-      var found = false;
-      for (var si = 0; si < scriptUrls.length && !found; si++) {
-        var url = scriptUrls[si];
-        if (url.indexOf('main') >= 0 || url.indexOf('app') >= 0 || url.indexOf('chunk') >= 0) {
-          try {
-            var jsResp = await fetch(url);
-            var jsText = await jsResp.text();
-            // Search for quick-prices or quick-price related patterns
-            var idx = jsText.indexOf('quick-prices');
-            if (idx < 0) idx = jsText.indexOf('quick-price');
-            if (idx < 0) idx = jsText.indexOf('quickPrice');
-            if (idx >= 0) {
-              // Extract surrounding code (5000 chars around the match)
-              var start = Math.max(0, idx - 2500);
-              var end = Math.min(jsText.length, idx + 2500);
-              jsDiscovery = {
-                url: url,
-                matchAt: idx,
-                context: jsText.substring(start, end)
-              };
-              found = true;
-              diag.steps.push('found_api_code_in: ' + url.split('/').pop());
-            }
-          } catch(e) {
-            diag.steps.push('fetch_error: ' + url.split('/').pop() + ' ' + e.message);
-          }
+      // Search for multiple patterns to find the data model
+      var searches = ['baseLoanAmount', 'loanAmount', 'propertyValue', 'purchasePrice', 'loanPurpose', 'nexApp', 'NexApp', 'creditScore', 'fico'];
+      var findings = {};
+      for (var s = 0; s < searches.length; s++) {
+        var term = searches[s];
+        var idx = jsText.indexOf(term);
+        if (idx >= 0) {
+          findings[term] = jsText.substring(Math.max(0, idx - 200), Math.min(jsText.length, idx + 300));
         }
       }
-      if (!found) {
-        // Try all scripts
-        for (var si = 0; si < scriptUrls.length && !found; si++) {
-          try {
-            var jsResp = await fetch(scriptUrls[si]);
-            var jsText = await jsResp.text();
-            var idx = jsText.indexOf('quick-prices');
-            if (idx < 0) idx = jsText.indexOf('quickPrice');
-            if (idx >= 0) {
-              var start = Math.max(0, idx - 2500);
-              var end = Math.min(jsText.length, idx + 2500);
-              jsDiscovery = {
-                url: scriptUrls[si],
-                matchAt: idx,
-                context: jsText.substring(start, end)
-              };
-              found = true;
-              diag.steps.push('found_in_bundle: ' + scriptUrls[si].split('/').pop());
-            }
-          } catch(e) {}
-        }
+
+      // Also search for the quick-price call site (where getQuickPrices is invoked)
+      var callIdx = jsText.indexOf('.getQuickPrices(');
+      if (callIdx >= 0) {
+        findings['getQuickPrices_call'] = jsText.substring(Math.max(0, callIdx - 500), Math.min(jsText.length, callIdx + 500));
       }
-      if (!found) diag.steps.push('api_code_not_found_in_bundles');
+
+      jsDiscovery = { findings: findings };
+      diag.steps.push('js_search_done: ' + Object.keys(findings).length + ' matches');
+
+      // Also test the API with data wrapper
+      var apiUrl = 'https://nexapi.loannex.com/loans/apps/' + userGuid + '/quick-prices';
+      var testBody = {
+        data: {
+          baseLoanAmount: 450000,
+          propertyValue: 600000,
+          creditScore: 740,
+          loanPurpose: 'Purchase',
+          occupancyType: 'Investment',
+          propertyType: 'SingleFamily',
+          state: 'CA',
+          zipCode: '90210'
+        }
+      };
+      var resp = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + jwt },
+        body: JSON.stringify(testBody)
+      });
+      var respText = await resp.text();
+      apiResult = { status: resp.status, body: respText.substring(0, 2000) };
+      diag.steps.push('api_test: ' + resp.status);
     } catch(e) {
-      diag.steps.push('js_search_error: ' + e.message);
+      diag.steps.push('error: ' + e.message);
     }
   }
 
   var linkList = [];
 
-  return JSON.stringify({ authInfo: authInfo, jsDiscovery: jsDiscovery, diag: diag });
+  return JSON.stringify({ authInfo: authInfo, jsDiscovery: jsDiscovery, apiResult: apiResult, diag: diag });
 })()`
 
     // Single BQL call with 5 steps:
