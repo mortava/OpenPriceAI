@@ -496,48 +496,74 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       var jsResp = await fetch(mainUrl);
       var jsText = await jsResp.text();
 
-      // 1. Extract all nexApp field names using string search (regex was broken in JSON escaping)
-      var nexAppFields = [];
-      var searchStart = 0;
-      var seen = {};
-      while (searchStart < jsText.length) {
-        var idx = jsText.indexOf('.nexApp.', searchStart);
-        if (idx < 0) break;
-        var fieldStart = idx + 8;
-        var fieldEnd = fieldStart;
-        while (fieldEnd < jsText.length && /[a-zA-Z0-9_]/.test(jsText[fieldEnd])) fieldEnd++;
-        var field = jsText.substring(fieldStart, fieldEnd);
-        if (field.length > 1 && !seen[field]) {
-          seen[field] = true;
-          nexAppFields.push(field);
+      // Search for field value enums (e.g., purpose options, occupancy options, propertyType options)
+      var enumSearches = ['Purchase', 'Refinance', 'CashOut', 'PrimaryResidence', 'InvestmentProperty', 'SecondHome', 'SingleFamily', 'Condo', 'Townhouse', 'MultiUnit', 'FullDoc', 'BankStatement', 'DSCR', 'AssetDepletion'];
+      var enumFindings = {};
+      for (var s = 0; s < enumSearches.length; s++) {
+        var term = enumSearches[s];
+        var idx = jsText.indexOf('"' + term + '"');
+        if (idx >= 0) {
+          enumFindings[term] = jsText.substring(Math.max(0, idx - 200), Math.min(jsText.length, idx + 200));
         }
-        searchStart = fieldEnd;
       }
 
-      // 2. Find Angular route definitions: search for path:" patterns
-      var routes = [];
-      searchStart = 0;
-      while (searchStart < jsText.length && routes.length < 50) {
-        var idx = jsText.indexOf('path:"', searchStart);
-        if (idx < 0) break;
-        var pathStart = idx + 6;
-        var pathEnd = jsText.indexOf('"', pathStart);
-        if (pathEnd > pathStart && (pathEnd - pathStart) < 80) {
-          var routePath = jsText.substring(pathStart, pathEnd);
-          if (routePath.length > 0 && routes.indexOf(routePath) < 0) routes.push(routePath);
+      // Search for purpose/occupancy option lists
+      var optSearches = ['purpose', 'occupancy', 'propertyType', 'incomeDocumentation', 'escrow'];
+      var optFindings = {};
+      for (var s = 0; s < optSearches.length; s++) {
+        var term = optSearches[s];
+        // Look for options arrays: "purpose":[{
+        var idx = jsText.indexOf('"' + term + '"');
+        if (idx >= 0) {
+          optFindings[term] = jsText.substring(idx, Math.min(jsText.length, idx + 500));
         }
-        searchStart = pathEnd + 1;
       }
 
-      // 3. Find getQuickPrices call site context
-      var callContext = '';
-      var callIdx = jsText.indexOf('.getQuickPrices(');
-      if (callIdx >= 0) {
-        callContext = jsText.substring(Math.max(0, callIdx - 800), Math.min(jsText.length, callIdx + 400));
+      // Find getQuickPrices call sites (search multiple occurrences)
+      var callContexts = [];
+      var searchPos = 0;
+      while (searchPos < jsText.length && callContexts.length < 3) {
+        var idx = jsText.indexOf('getQuickPrices', searchPos);
+        if (idx < 0) break;
+        callContexts.push(jsText.substring(Math.max(0, idx - 300), Math.min(jsText.length, idx + 400)));
+        searchPos = idx + 20;
       }
 
-      jsDiscovery = { nexAppFields: nexAppFields, routes: routes, getQuickPricesCall: callContext };
-      diag.steps.push('found: ' + nexAppFields.length + ' fields, ' + routes.length + ' routes');
+      jsDiscovery = { enumFindings: enumFindings, optFindings: optFindings, callContexts: callContexts };
+      diag.steps.push('enums: ' + Object.keys(enumFindings).length + ', opts: ' + Object.keys(optFindings).length + ', calls: ' + callContexts.length);
+
+      // Test API with correct field names
+      var apiUrl = 'https://nexapi.loannex.com/loans/apps/' + userGuid + '/quick-prices';
+      var testBody = {
+        data: {
+          loanAmount: 450000,
+          appraisedValue: 600000,
+          purchasePrice: 600000,
+          fico: 740,
+          state: 'CA',
+          zipCode: '90210',
+          purpose: 'Purchase',
+          occupancy: 'InvestmentProperty',
+          propertyType: 'SingleFamily',
+          incomeDocumentation: 'DSCR',
+          numberOfUnits: 1,
+          escrow: true,
+          isFirstTimeHomebuyer: false,
+          isFirstTimeInvestor: false,
+          isShortTermRental: false,
+          isRuralProperty: false,
+          numberOfFinancedProperties: 1
+        }
+      };
+      var resp = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + jwt },
+        body: JSON.stringify(testBody)
+      });
+      var respText = await resp.text();
+      var apiResult2 = { status: resp.status, body: respText.substring(0, 3000) };
+      diag.steps.push('api: ' + resp.status);
+      jsDiscovery.apiResult = apiResult2;
     } catch(e) {
       diag.steps.push('error: ' + e.message);
     }
