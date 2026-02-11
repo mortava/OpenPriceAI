@@ -496,43 +496,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       var jsResp = await fetch(mainUrl);
       var jsText = await jsResp.text();
 
-      // Search for field value enums (e.g., purpose options, occupancy options, propertyType options)
-      var enumSearches = ['Purchase', 'Refinance', 'CashOut', 'PrimaryResidence', 'InvestmentProperty', 'SecondHome', 'SingleFamily', 'Condo', 'Townhouse', 'MultiUnit', 'FullDoc', 'BankStatement', 'DSCR', 'AssetDepletion'];
-      var enumFindings = {};
-      for (var s = 0; s < enumSearches.length; s++) {
-        var term = enumSearches[s];
-        var idx = jsText.indexOf('"' + term + '"');
-        if (idx >= 0) {
-          enumFindings[term] = jsText.substring(Math.max(0, idx - 200), Math.min(jsText.length, idx + 200));
-        }
-      }
+      // Find ALL enums - search for patterns like L.XXX="YYY" which define enum values
+      // Focus on the section around Purchase/CashOutRefinance (the purpose enum area)
+      var purposeIdx = jsText.indexOf('.Purchase="Purchase"');
+      var enumBlock = purposeIdx >= 0 ? jsText.substring(Math.max(0, purposeIdx - 2000), Math.min(jsText.length, purposeIdx + 2000)) : '';
 
-      // Search for purpose/occupancy option lists
-      var optSearches = ['purpose', 'occupancy', 'propertyType', 'incomeDocumentation', 'escrow'];
-      var optFindings = {};
-      for (var s = 0; s < optSearches.length; s++) {
-        var term = optSearches[s];
-        // Look for options arrays: "purpose":[{
-        var idx = jsText.indexOf('"' + term + '"');
-        if (idx >= 0) {
-          optFindings[term] = jsText.substring(idx, Math.min(jsText.length, idx + 500));
-        }
-      }
+      // Find occupancy enum
+      var occIdx = jsText.indexOf('PrimaryResidence');
+      if (occIdx < 0) occIdx = jsText.indexOf('OwnerOccupied');
+      if (occIdx < 0) occIdx = jsText.indexOf('primaryResidence');
+      var occBlock = occIdx >= 0 ? jsText.substring(Math.max(0, occIdx - 500), Math.min(jsText.length, occIdx + 500)) : 'NOT_FOUND';
 
-      // Find getQuickPrices call sites (search multiple occurrences)
-      var callContexts = [];
-      var searchPos = 0;
-      while (searchPos < jsText.length && callContexts.length < 3) {
-        var idx = jsText.indexOf('getQuickPrices', searchPos);
-        if (idx < 0) break;
-        callContexts.push(jsText.substring(Math.max(0, idx - 300), Math.min(jsText.length, idx + 400)));
-        searchPos = idx + 20;
-      }
+      // Find propertyType enum
+      var ptIdx = jsText.indexOf('SingleFamily');
+      if (ptIdx < 0) ptIdx = jsText.indexOf('singleFamily');
+      var ptBlock = ptIdx >= 0 ? jsText.substring(Math.max(0, ptIdx - 500), Math.min(jsText.length, ptIdx + 500)) : 'NOT_FOUND';
 
-      jsDiscovery = { enumFindings: enumFindings, optFindings: optFindings, callContexts: callContexts };
-      diag.steps.push('enums: ' + Object.keys(enumFindings).length + ', opts: ' + Object.keys(optFindings).length + ', calls: ' + callContexts.length);
+      // Find escrow enum/options
+      var escIdx = jsText.indexOf('EscrowWaived');
+      if (escIdx < 0) escIdx = jsText.indexOf('escrowWaived');
+      if (escIdx < 0) escIdx = jsText.indexOf('NoEscrow');
+      var escBlock = escIdx >= 0 ? jsText.substring(Math.max(0, escIdx - 300), Math.min(jsText.length, escIdx + 300)) : 'NOT_FOUND';
 
-      // Test API with correct field names
+      jsDiscovery = {
+        purposeEnumBlock: enumBlock.substring(0, 2000),
+        occupancyBlock: occBlock.substring(0, 800),
+        propertyTypeBlock: ptBlock.substring(0, 800),
+        escrowBlock: escBlock.substring(0, 500)
+      };
+      diag.steps.push('enum_search_done');
+
+      // Test API with corrected enum values
       var apiUrl = 'https://nexapi.loannex.com/loans/apps/' + userGuid + '/quick-prices';
       var testBody = {
         data: {
@@ -545,14 +539,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           purpose: 'Purchase',
           occupancy: 'InvestmentProperty',
           propertyType: 'SingleFamily',
-          incomeDocumentation: 'DSCR',
+          incomeDocumentation: 'DebtServiceCoverageRatio',
           numberOfUnits: 1,
           escrow: true,
           isFirstTimeHomebuyer: false,
           isFirstTimeInvestor: false,
           isShortTermRental: false,
           isRuralProperty: false,
-          numberOfFinancedProperties: 1
+          numberOfFinancedProperties: 1,
+          prePaymentPenaltyTermInMonths: 60,
+          totalMonthlyIncome: 0,
+          monthlySubjectPropertyExpenses: 0,
+          totalOtherMonthlyLiabilities: 0,
+          cashOutAmount: 0,
+          secondLein: 0,
+          helocDrawnAmount: 0,
+          helocLineAmount: 0,
+          citizenship: 'USCitizen'
         }
       };
       var resp = await fetch(apiUrl, {
@@ -561,9 +564,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         body: JSON.stringify(testBody)
       });
       var respText = await resp.text();
-      var apiResult2 = { status: resp.status, body: respText.substring(0, 3000) };
+      jsDiscovery.apiResult = { status: resp.status, body: respText.substring(0, 3000) };
       diag.steps.push('api: ' + resp.status);
-      jsDiscovery.apiResult = apiResult2;
     } catch(e) {
       diag.steps.push('error: ' + e.message);
     }
