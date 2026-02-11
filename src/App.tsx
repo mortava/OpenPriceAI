@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Calculator, DollarSign, Loader2, CheckCircle2, AlertCircle, Info, ChevronDown, ChevronUp, Menu, X, ExternalLink, Zap, Globe, ShieldCheck } from 'lucide-react'
+import { Calculator, DollarSign, Loader2, CheckCircle2, AlertCircle, Info, ChevronDown, ChevronUp, Menu, X, ExternalLink, Zap, Globe, ShieldCheck, Lock, Unlock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -275,6 +275,11 @@ export default function App() {
   const [loadingProgress, setLoadingProgress] = useState(0)
   const [lpResult, setLpResult] = useState<any>(null)
   const [lpLoading, setLpLoading] = useState(false)
+  const [lnResult, setLnResult] = useState<any>(null)
+  const [lnLoading, setLnLoading] = useState(false)
+  const [lnUnlocked, setLnUnlocked] = useState(false)
+  const [lnPin, setLnPin] = useState('')
+  const [lnPinError, setLnPinError] = useState(false)
 
   useEffect(() => {
     if (!isLoading) { setLoadingProgress(0); return }
@@ -337,6 +342,10 @@ export default function App() {
     if (result) {
       setResult(null)
       setLpResult(null)
+      setLnResult(null)
+      setLnUnlocked(false)
+      setLnPin('')
+      setLnPinError(false)
       setExpandedProgram(null)
     }
 
@@ -469,7 +478,7 @@ export default function App() {
       return
     }
 
-    setIsLoading(true); setError(null); setResult(null); setLpResult(null); setLpLoading(true)
+    setIsLoading(true); setError(null); setResult(null); setLpResult(null); setLpLoading(true); setLnResult(null); setLnUnlocked(false); setLnPin(''); setLnPinError(false); setLnLoading(false)
     const isDSCR = formData.documentationType === 'dscr'
     const requestBody = {
       ...formData,
@@ -534,6 +543,51 @@ export default function App() {
       setError(err instanceof Error ? err.message : 'Failed to get pricing')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  // ================= Loannex PIN + Pricing =================
+  const fetchLnPricing = async () => {
+    setLnLoading(true)
+    setLnResult(null)
+    const isDSCR = formData.documentationType === 'dscr'
+    const requestBody = {
+      ...formData,
+      loanAmount: Number(formData.loanAmount.replace(/,/g, '')),
+      propertyValue: Number(formData.propertyValue.replace(/,/g, '')),
+      cashoutAmount: formData.cashoutAmount ? Number(formData.cashoutAmount.replace(/,/g, '')) : 0,
+      creditScore: Number(formData.creditScore),
+      dti: Number(formData.dti),
+      ltv: parseFloat(formData.ltv) || 0,
+      presentHousingExpense: isDSCR ? Number(formData.presentHousingExpense.replace(/,/g, '')) : undefined,
+      grossRent: isDSCR ? Number(formData.grossRent.replace(/,/g, '')) : undefined,
+    }
+    try {
+      const resp = await fetch('/api/get-ln-pricing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      })
+      const data = await resp.json()
+      if (data.success && data.data) {
+        setLnResult(data.data)
+      } else {
+        setLnResult({ rateOptions: [], error: data.error || 'No rates returned' })
+      }
+    } catch (err) {
+      setLnResult({ rateOptions: [], error: 'Loannex pricing unavailable' })
+    } finally {
+      setLnLoading(false)
+    }
+  }
+
+  const handleLnPinSubmit = () => {
+    if (lnPin === '4444') {
+      setLnPinError(false)
+      setLnUnlocked(true)
+      fetchLnPricing()
+    } else {
+      setLnPinError(true)
     }
   }
 
@@ -1679,6 +1733,136 @@ export default function App() {
                       <p className="text-sm text-slate-400 text-center">
                         No national wholesale rates available for this scenario
                       </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* ============ LOANNEX PIN GATE + RESULTS ============ */}
+              {result && !lnUnlocked && (
+                <Card className="mt-6 border border-amber-600/40 bg-gradient-to-br from-amber-950/40 via-slate-900 to-slate-900 text-white overflow-hidden">
+                  <CardContent className="py-6">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="flex items-center justify-center w-10 h-10 rounded-full bg-amber-500/15 border border-amber-500/30">
+                        <Lock className="w-5 h-5 text-amber-400" />
+                      </div>
+                      <p className="text-sm font-medium text-amber-200">Additional Pricing Source Available</p>
+                      <p className="text-xs text-slate-400">Enter access code to view Loannex rates</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Input
+                          type="password"
+                          maxLength={4}
+                          value={lnPin}
+                          onChange={(e) => { setLnPin(e.target.value); setLnPinError(false) }}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleLnPinSubmit() }}
+                          placeholder="****"
+                          className={`w-24 text-center bg-slate-800 border-slate-600 text-white placeholder:text-slate-500 tracking-[0.3em] ${lnPinError ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleLnPinSubmit}
+                          className="bg-amber-600 hover:bg-amber-700 text-white"
+                        >
+                          <Unlock className="w-3.5 h-3.5 mr-1" />Unlock
+                        </Button>
+                      </div>
+                      {lnPinError && <p className="text-xs text-red-400">Invalid access code</p>}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {lnUnlocked && lnLoading && (
+                <Card className="mt-6 border border-purple-600/30 bg-gradient-to-br from-purple-950/30 via-slate-900 to-slate-900 text-white overflow-hidden">
+                  <CardContent className="py-8">
+                    <div className="flex flex-col items-center justify-center gap-3">
+                      <div className="relative">
+                        <Globe className="w-8 h-8 text-purple-400 animate-pulse" />
+                        <div className="absolute -top-1 -right-1 w-3 h-3 bg-purple-400 rounded-full animate-ping" />
+                      </div>
+                      <span className="text-sm text-slate-300 font-medium tracking-wide">Fetching Loannex pricing...</span>
+                      <div className="flex gap-1 mt-1">
+                        <div className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <div className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <div className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {lnUnlocked && !lnLoading && lnResult && lnResult.rateOptions && lnResult.rateOptions.length > 0 && (
+                <Card className="mt-6 border border-purple-600/30 bg-gradient-to-br from-purple-950/20 via-slate-900 to-slate-900 text-white overflow-hidden relative">
+                  <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.1) 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
+                  <CardHeader className="pb-3 relative z-10">
+                    <div className="flex items-center justify-between flex-wrap gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-500/30">
+                          <Zap className="w-4 h-4 text-purple-400" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-base font-semibold text-white tracking-tight">
+                            Loannex - Wholesale Rate Results
+                          </CardTitle>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 text-[11px] text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2.5 py-1 rounded-full font-medium">
+                          <ShieldCheck className="w-3 h-3" />Verified
+                        </div>
+                        <span className="text-[11px] font-mono text-slate-400">
+                          {lnResult.rateOptions.length} rates
+                        </span>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="relative z-10">
+                    <div className="overflow-x-auto rounded-lg border border-slate-700/80 bg-slate-800/50">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-700">
+                            <th className="text-left py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Program</th>
+                            <th className="text-right py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Rate</th>
+                            <th className="text-right py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Price</th>
+                            <th className="text-right py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Payment</th>
+                            <th className="text-left py-2.5 px-4 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Investor</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {lnResult.rateOptions.map((opt: any, idx: number) => (
+                            <tr key={idx} className="border-t border-slate-700/60 hover:bg-slate-700/30 transition-colors">
+                              <td className="py-2.5 px-4 text-slate-300 text-xs">{opt.program || '-'}</td>
+                              <td className="py-2.5 px-4 text-right font-semibold text-purple-300 font-mono">
+                                {safeNumber(opt.rate).toFixed(3)}%
+                              </td>
+                              <td className={`py-2.5 px-4 text-right font-mono ${safeNumber(opt.price) >= 100 ? 'text-emerald-400 font-semibold' : 'text-slate-300'}`}>
+                                {safeNumber(opt.price).toFixed(3)}
+                              </td>
+                              <td className="py-2.5 px-4 text-right text-slate-300 font-mono">
+                                {opt.payment > 0 ? formatCurrency(safeNumber(opt.payment)) : '-'}
+                              </td>
+                              <td className="py-2.5 px-4 text-slate-400 text-xs">{opt.investor || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {lnUnlocked && !lnLoading && lnResult && (!lnResult.rateOptions || lnResult.rateOptions.length === 0) && (
+                <Card className="mt-6 border border-purple-600/20 bg-gradient-to-br from-purple-950/20 via-slate-900 to-slate-900 text-white">
+                  <CardContent className="py-6">
+                    <div className="flex flex-col items-center gap-2">
+                      <Globe className="w-5 h-5 text-purple-400/50" />
+                      <p className="text-sm text-slate-400 text-center">
+                        {lnResult.error || 'No Loannex rates available for this scenario'}
+                      </p>
+                      <Button type="button" size="sm" variant="outline" onClick={fetchLnPricing} className="mt-2 border-purple-600/40 text-purple-300 hover:bg-purple-600/10">
+                        Retry
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
