@@ -47,22 +47,17 @@ function buildLoginScript(email: string, password: string): string {
   setInput(passwordInput, '${password}');
   await sleep(300);
 
-  // Click Sign In button
+  // Schedule login click via setTimeout so evaluate returns BEFORE page navigation
+  // (navigation destroys the evaluate context — this avoids the Protocol error)
   if (loginBtn) {
-    loginBtn.click();
-    diag.steps.push('login_clicked');
+    setTimeout(function() { loginBtn.click(); }, 200);
+    diag.steps.push('login_scheduled');
   } else {
     var form = userInput.closest('form');
-    if (form) { form.submit(); diag.steps.push('form_submitted'); }
+    if (form) { setTimeout(function() { form.submit(); }, 200); diag.steps.push('submit_scheduled'); }
   }
 
-  // Wait for navigation / page load after login
-  await sleep(5000);
-  diag.steps.push('post_login_url: ' + window.location.href);
-  diag.steps.push('post_login_title: ' + document.title);
-  diag.steps.push('post_login_body: ' + (document.body.innerText || '').substring(0, 300));
-
-  return JSON.stringify({ loggedIn: true, diag: diag });
+  return JSON.stringify({ loggedIn: false, loginScheduled: true, diag: diag });
 })()`
 }
 
@@ -302,22 +297,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Build BQL query - login then either discover or fill+scrape
     let bqlQuery: string
 
+    // Two-phase BQL:
+    // Phase 1: goto login page → fill credentials → schedule click (returns before navigation)
+    // Phase 2: wait for login redirect → goto app URL with session cookies → discover/fill/scrape
+    const waitScript = `(async function() { await new Promise(r => setTimeout(r, 6000)); return JSON.stringify({ waited: true }); })()`
+
     if (isDiscovery) {
-      // Discovery mode: login → dump all form fields
       bqlQuery = `mutation LoginAndDiscover {
-  goto(url: "${LOANNEX_URL}", waitUntil: networkIdle) { status time }
-  login: evaluate(content: ${JSON.stringify(loginScript)}, timeout: 15000) { value }
-  discover: evaluate(content: ${JSON.stringify(discoveryScript)}, timeout: 10000) { value }
+  loginPage: goto(url: "${LOANNEX_URL}", waitUntil: networkIdle) { status time }
+  login: evaluate(content: ${JSON.stringify(loginScript)}, timeout: 10000) { value }
+  waitForLogin: evaluate(content: ${JSON.stringify(waitScript)}, timeout: 10000) { value }
+  appPage: goto(url: "${LOANNEX_URL}", waitUntil: networkIdle) { status time }
+  discover: evaluate(content: ${JSON.stringify(discoveryScript)}, timeout: 15000) { value }
 }`
     } else {
-      // Full mode: login → fill → scrape
       const formData = req.body || {}
       const fillScript = buildFormFillScript(formData)
       const scrapeScript = buildScrapeScript()
 
       bqlQuery = `mutation LoginFillScrape {
-  goto(url: "${LOANNEX_URL}", waitUntil: networkIdle) { status time }
-  login: evaluate(content: ${JSON.stringify(loginScript)}, timeout: 15000) { value }
+  loginPage: goto(url: "${LOANNEX_URL}", waitUntil: networkIdle) { status time }
+  login: evaluate(content: ${JSON.stringify(loginScript)}, timeout: 10000) { value }
+  waitForLogin: evaluate(content: ${JSON.stringify(waitScript)}, timeout: 10000) { value }
+  appPage: goto(url: "${LOANNEX_URL}", waitUntil: networkIdle) { status time }
   fill: evaluate(content: ${JSON.stringify(fillScript)}, timeout: 15000) { value }
   scrape: evaluate(content: ${JSON.stringify(scrapeScript)}, timeout: 30000) { value }
 }`
@@ -341,7 +343,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const bqlResult = await bqlResp.json()
 
-    if (bqlResult.errors) {
+    if (bqlResult.errors && !bqlResult.data) {
+      // Only fail if there's no data at all (partial errors are OK — login nav causes expected errors)
       return res.json({
         success: false,
         error: 'BQL execution error',
