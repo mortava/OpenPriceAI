@@ -521,7 +521,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const bqlResult = await bqlResp.json()
 
     if (bqlResult.errors && !bqlResult.data) {
-      return res.json({ success: false, error: 'BQL error' })
+      return res.json({ success: false, error: 'BQL error', bqlErrors: (bqlResult.errors || []).map((e: any) => e.message).slice(0, 5) })
     }
 
     // Parse results — try step 5 (price) first, fall back to step 7 (retryPrice)
@@ -531,15 +531,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     let priceData = safeParseValue(bqlResult.data?.price?.value)
+    const retryRaw = safeParseValue(bqlResult.data?.retryPrice?.value)
+    let usedStep = 'price'
 
     // If step 5 indicated it navigated to Quick Pricer, use step 7 results
     if (!priceData || priceData.needsNextStep || (priceData.rates && priceData.rates.length === 0 && priceData.diag?.steps?.includes('on_lock_desk_navigating_to_qp'))) {
-      const retryData = safeParseValue(bqlResult.data?.retryPrice?.value)
-      if (retryData && retryData.rates) priceData = retryData
+      if (retryRaw && retryRaw.rates) {
+        priceData = retryRaw
+        usedStep = 'retryPrice'
+      }
     }
 
     if (!priceData) {
-      return res.json({ success: false, error: 'No data from pricing step' })
+      return res.json({
+        success: false,
+        error: 'No data from pricing step',
+        debug: {
+          priceStep: safeParseValue(bqlResult.data?.price?.value),
+          retryStep: retryRaw,
+          bqlErrors: (bqlResult.errors || []).map((e: any) => ({ msg: e.message?.substring(0, 100), path: e.path })).slice(0, 5),
+          hasData: !!bqlResult.data,
+          dataKeys: bqlResult.data ? Object.keys(bqlResult.data) : [],
+        }
+      })
     }
 
     // Transform scraped table rows into rate options
@@ -582,7 +596,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         rateOptions,
         totalRates: rateOptions.length,
         rawRows: rates.length,
+        usedStep,
         diag: priceData.diag,
+        retryDiag: usedStep === 'price' ? (retryRaw?.diag || null) : null,
       },
     })
   } catch (error) {
