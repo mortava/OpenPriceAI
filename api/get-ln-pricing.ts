@@ -496,76 +496,61 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       var jsResp = await fetch(mainUrl);
       var jsText = await jsResp.text();
 
-      // Find ALL enums - search for patterns like L.XXX="YYY" which define enum values
-      // Focus on the section around Purchase/CashOutRefinance (the purpose enum area)
-      var purposeIdx = jsText.indexOf('.Purchase="Purchase"');
-      var enumBlock = purposeIdx >= 0 ? jsText.substring(Math.max(0, purposeIdx - 2000), Math.min(jsText.length, purposeIdx + 2000)) : '';
+      // Navigate to Quick Pricer page and discover form dropdown options
+      diag.steps.push('navigating_to_nex_app');
+      window.location.href = 'https://webapp.loannex.com/nex-app';
+      await sleep(5000);
 
-      // Find occupancy enum
-      var occIdx = jsText.indexOf('PrimaryResidence');
-      if (occIdx < 0) occIdx = jsText.indexOf('OwnerOccupied');
-      if (occIdx < 0) occIdx = jsText.indexOf('primaryResidence');
-      var occBlock = occIdx >= 0 ? jsText.substring(Math.max(0, occIdx - 500), Math.min(jsText.length, occIdx + 500)) : 'NOT_FOUND';
+      diag.steps.push('nex_app_url: ' + window.location.href);
 
-      // Find propertyType enum
-      var ptIdx = jsText.indexOf('SingleFamily');
-      if (ptIdx < 0) ptIdx = jsText.indexOf('singleFamily');
-      var ptBlock = ptIdx >= 0 ? jsText.substring(Math.max(0, ptIdx - 500), Math.min(jsText.length, ptIdx + 500)) : 'NOT_FOUND';
-
-      // Find escrow enum/options
-      var escIdx = jsText.indexOf('EscrowWaived');
-      if (escIdx < 0) escIdx = jsText.indexOf('escrowWaived');
-      if (escIdx < 0) escIdx = jsText.indexOf('NoEscrow');
-      var escBlock = escIdx >= 0 ? jsText.substring(Math.max(0, escIdx - 300), Math.min(jsText.length, escIdx + 300)) : 'NOT_FOUND';
-
-      jsDiscovery = {
-        purposeEnumBlock: enumBlock.substring(0, 2000),
-        occupancyBlock: occBlock.substring(0, 800),
-        propertyTypeBlock: ptBlock.substring(0, 800),
-        escrowBlock: escBlock.substring(0, 500)
-      };
-      diag.steps.push('enum_search_done');
-
-      // Test API with corrected enum values
-      var apiUrl = 'https://nexapi.loannex.com/loans/apps/' + userGuid + '/quick-prices';
-      var testBody = {
-        data: {
-          loanAmount: 450000,
-          appraisedValue: 600000,
-          purchasePrice: 600000,
-          fico: 740,
-          state: 'CA',
-          zipCode: '90210',
-          purpose: 'Purchase',
-          occupancy: 'InvestmentProperty',
-          propertyType: 'SingleFamily',
-          incomeDocumentation: 'DebtServiceCoverageRatio',
-          numberOfUnits: 1,
-          escrow: true,
-          isFirstTimeHomebuyer: false,
-          isFirstTimeInvestor: false,
-          isShortTermRental: false,
-          isRuralProperty: false,
-          numberOfFinancedProperties: 1,
-          prePaymentPenaltyTermInMonths: 60,
-          totalMonthlyIncome: 0,
-          monthlySubjectPropertyExpenses: 0,
-          totalOtherMonthlyLiabilities: 0,
-          cashOutAmount: 0,
-          secondLein: 0,
-          helocDrawnAmount: 0,
-          helocLineAmount: 0,
-          citizenship: 'USCitizen'
+      // Wait for the pricing form to render
+      for (var wi = 0; wi < 10; wi++) {
+        await sleep(1000);
+        var allInputs = document.querySelectorAll('input:not([type=hidden]), select, textarea, p-dropdown, [role=combobox]');
+        if (allInputs.length > 5) {
+          diag.steps.push('form_ready: ' + allInputs.length + ' inputs at ' + (wi+1) + 's');
+          break;
         }
-      };
-      var resp = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + jwt },
-        body: JSON.stringify(testBody)
-      });
-      var respText = await resp.text();
-      jsDiscovery.apiResult = { status: resp.status, body: respText.substring(0, 3000) };
-      diag.steps.push('api: ' + resp.status);
+      }
+
+      // Discover all form fields with their dropdown options
+      // PrimeNG dropdowns use p-dropdown component with hidden select or div[role=listbox]
+      var formFields = [];
+
+      // Get all PrimeNG dropdown elements and their options
+      var dropdowns = document.querySelectorAll('p-dropdown, [class*=p-dropdown]');
+      diag.steps.push('p-dropdowns: ' + dropdowns.length);
+
+      // Also get standard selects
+      var selects = document.querySelectorAll('select');
+      for (var si = 0; si < selects.length; si++) {
+        var sel = selects[si];
+        var opts = [];
+        for (var oi = 0; oi < sel.options.length && oi < 30; oi++) {
+          opts.push({ v: sel.options[oi].value, t: sel.options[oi].text });
+        }
+        formFields.push({ tag: 'SELECT', id: sel.id || '', name: sel.name || '', options: opts });
+      }
+
+      // Get all inputs and their labels
+      var inputs = document.querySelectorAll('input:not([type=hidden]), textarea');
+      for (var ii = 0; ii < inputs.length && ii < 50; ii++) {
+        var inp = inputs[ii];
+        var lbl = '';
+        var lblEl = inp.closest('label') || document.querySelector('label[for=' + JSON.stringify(inp.id) + ']');
+        if (lblEl) lbl = (lblEl.textContent || '').trim();
+        if (!lbl && inp.parentElement) {
+          var sib = inp.parentElement.querySelector('label, .label, span');
+          if (sib && sib !== inp) lbl = (sib.textContent || '').trim();
+        }
+        if (!lbl) lbl = inp.getAttribute('aria-label') || inp.getAttribute('placeholder') || '';
+        formFields.push({ tag: 'INPUT', id: inp.id || '', name: inp.name || '', type: inp.type || '', label: lbl.substring(0, 50), value: (inp.value || '').substring(0, 30) });
+      }
+
+      // Capture full body text to see form labels
+      var bodyText = (document.body.innerText || '').substring(0, 3000);
+
+      jsDiscovery = { formFields: formFields, bodyPreview: bodyText };
     } catch(e) {
       diag.steps.push('error: ' + e.message);
     }
