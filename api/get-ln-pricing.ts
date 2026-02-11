@@ -5,6 +5,46 @@ const LOANNEX_LOGIN_URL = 'https://web.loannex.com/'
 
 export const config = { maxDuration: 60 }
 
+// ================= Field Mapping =================
+function mapFormToLN(body: any): Record<string, string> {
+  const purposeMap: Record<string, string> = {
+    purchase: 'Purchase', refinance: 'Rate/Term Refinance', cashout: 'Cash-Out Refinance',
+  }
+  const occupancyMap: Record<string, string> = {
+    primary: 'Primary', secondary: 'Second Home', investment: 'Investment',
+  }
+  const propertyMap: Record<string, string> = {
+    sfr: 'SFR', condo: 'Condo', townhouse: 'Townhouse',
+    '2unit': '2 Unit', '3unit': '3 Unit', '4unit': '4 Unit', '5-9unit': '5+ Unit',
+  }
+  const docMap: Record<string, string> = {
+    fullDoc: 'Full Doc', dscr: 'DSCR', bankStatement: 'Bank Statement',
+    assetDepletion: 'Asset Depletion', voe: 'VOE', noRatio: 'No Ratio',
+  }
+  const citizenMap: Record<string, string> = {
+    usCitizen: 'US Citizen', permanentResident: 'Permanent Resident', foreignNational: 'Foreign National',
+  }
+
+  const loanAmount = String(body.loanAmount || '450000').replace(/,/g, '')
+  const propertyValue = String(body.propertyValue || '600000').replace(/,/g, '')
+  const creditScore = String(body.creditScore || '740')
+
+  return {
+    'Purpose': purposeMap[body.loanPurpose] || 'Purchase',
+    'Occupancy': occupancyMap[body.occupancyType] || 'Investment',
+    'Property Type': propertyMap[body.propertyType] || 'SFR',
+    'Income Doc': docMap[body.documentationType] || 'DSCR',
+    'Citizenship': citizenMap[body.citizenship] || 'US Citizen',
+    'State': body.propertyState || 'CA',
+    'Appraised Value': propertyValue,
+    'Purchase Price': body.loanPurpose === 'purchase' ? propertyValue : '',
+    'First Lien Amount': loanAmount,
+    'FICO': creditScore,
+    'DTI': String(body.dti || ''),
+    'Escrows': body.impoundType === '3' ? 'No' : 'Yes',
+  }
+}
+
 // ================= Step 2: Login to wrapper =================
 function buildLoginScript(email: string, password: string): string {
   return `(async function() {
@@ -30,7 +70,7 @@ function buildLoginScript(email: string, password: string): string {
 })()`
 }
 
-// ================= Step 4: Extract iframe URL and navigate =================
+// ================= Step 4: Navigate to iframe =================
 function buildNavToIframeScript(): string {
   return `(async function() {
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -38,152 +78,240 @@ function buildNavToIframeScript(): string {
   var iframes = document.getElementsByTagName('iframe');
   var iframe = null;
   for (var i = 0; i < iframes.length; i++) {
-    if (iframes[i].src && iframes[i].src.indexOf('loannex') >= 0) { iframe = iframes[i]; break; }
     if (iframes[i].src && iframes[i].src.indexOf('nex-app') >= 0) { iframe = iframes[i]; break; }
+    if (iframes[i].src && iframes[i].src.indexOf('loannex') >= 0) { iframe = iframes[i]; break; }
   }
   if (!iframe && iframes.length > 0) iframe = iframes[0];
   if (iframe && iframe.src && iframe.src.length > 10) {
     window.location.href = iframe.src;
     await sleep(500);
-    return JSON.stringify({ ok: true, url: iframe.src });
+    return JSON.stringify({ ok: true });
   }
   return JSON.stringify({ ok: false, error: 'no_iframe' });
 })()`
 }
 
-// ================= Step 5: Angular login + discover Quick Pricer nav =================
-function buildAngularDiscoverScript(email: string, password: string): string {
+// ================= Step 5: Fill form + Get Price + Scrape =================
+function buildFillAndScrapeScript(fieldMap: Record<string, string>): string {
+  const mapJson = JSON.stringify(fieldMap)
   return `(async function() {
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-  var diag = { steps: [] };
+  var diag = { steps: [], fills: [] };
+  var fieldMap = ${mapJson};
 
-  // Poll for Angular login form or pricing form
-  var usernameField = null;
-  var passwordField = null;
-  var pricingReady = false;
-  for (var w = 0; w < 10; w++) {
+  // Wait for Quick Pricer form to load (tokenKey auto-auth)
+  for (var w = 0; w < 12; w++) {
     await sleep(1500);
-    usernameField = document.getElementById('username');
-    passwordField = document.getElementById('password');
-    var allInputs = document.querySelectorAll('input:not([type=hidden]), select');
-    if (usernameField && passwordField) {
-      diag.steps.push('login_form_at: ' + ((w+1)*1.5) + 's');
-      break;
-    }
-    if (allInputs.length > 5) {
-      diag.steps.push('form_ready_at: ' + ((w+1)*1.5) + 's, fields: ' + allInputs.length);
-      pricingReady = true;
-      break;
-    }
+    var inputs = document.querySelectorAll('input:not([type=hidden])');
+    if (inputs.length > 10) { diag.steps.push('form_at: ' + ((w+1)*1.5) + 's, fields: ' + inputs.length); break; }
   }
 
-  // Angular login if needed
-  if (usernameField && passwordField) {
-    function setInput(el, val) {
-      el.focus(); el.value = '';
-      el.dispatchEvent(new Event('focus', {bubbles: true}));
-      var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-      if (setter) setter.call(el, val);
-      el.dispatchEvent(new Event('input', {bubbles: true}));
-      el.dispatchEvent(new Event('change', {bubbles: true}));
-      el.dispatchEvent(new Event('blur', {bubbles: true}));
-    }
-    setInput(usernameField, '${email}');
-    await sleep(300);
-    setInput(passwordField, '${password}');
-    await sleep(300);
-    var signInBtn = document.querySelector('button.login-button') || document.querySelector('button');
-    if (signInBtn) { signInBtn.click(); diag.steps.push('login_clicked'); }
-
-    // Wait for app to load after login
-    for (var i = 0; i < 10; i++) {
-      await sleep(1500);
-      var inputs = document.querySelectorAll('input:not([type=hidden]), select');
-      if (inputs.length > 5) { diag.steps.push('app_loaded_at: ' + ((i+1)*1.5) + 's, fields: ' + inputs.length); break; }
-    }
-  }
-
-  diag.steps.push('url: ' + window.location.href);
-  diag.steps.push('title: ' + document.title);
-
-  // Search for ALL clickable navigation items
-  var navItems = [];
-  var allEls = document.querySelectorAll('a, button, [role="menuitem"], [role="button"], li, span, div');
-  for (var n = 0; n < allEls.length; n++) {
-    var el = allEls[n];
-    var text = '';
-    // Get direct text content (not children)
-    for (var c = 0; c < el.childNodes.length; c++) {
-      if (el.childNodes[c].nodeType === 3) text += el.childNodes[c].textContent;
-    }
-    text = text.trim();
-    if (!text) text = (el.textContent || '').trim();
-    if (text.length > 0 && text.length < 40) {
-      var tag = el.tagName;
-      var cls = (el.className || '').substring(0, 60);
-      // Only include potentially clickable/nav items
-      if (tag === 'A' || tag === 'BUTTON' || cls.indexOf('nav') >= 0 || cls.indexOf('menu') >= 0 ||
-          cls.indexOf('item') >= 0 || cls.indexOf('link') >= 0 || cls.indexOf('sidebar') >= 0 ||
-          el.getAttribute('role') || el.onclick || el.getAttribute('routerlink')) {
-        navItems.push({ tag: tag, text: text.substring(0, 40), cls: cls, id: el.id || '', href: el.getAttribute('href') || el.getAttribute('routerlink') || '' });
+  // Find field container by label text
+  function findField(labelText) {
+    var allDivs = document.querySelectorAll('div.flex.flex-row');
+    for (var d = 0; d < allDivs.length; d++) {
+      var divText = (allDivs[d].textContent || '').trim();
+      if (divText.indexOf(labelText) === 0 || divText.startsWith(labelText)) {
+        return allDivs[d];
       }
     }
+    // Fallback: search all elements
+    var allEls = document.querySelectorAll('*');
+    for (var e = 0; e < allEls.length; e++) {
+      var directText = '';
+      for (var c = 0; c < allEls[e].childNodes.length; c++) {
+        if (allEls[e].childNodes[c].nodeType === 3) directText += allEls[e].childNodes[c].textContent;
+      }
+      if (directText.trim() === labelText) return allEls[e].closest('div.flex');
+    }
+    return null;
   }
 
-  // Search specifically for "Quick Pricer" or "Pricing" or "Search" elements
-  var pricerElements = [];
-  var allElements = document.querySelectorAll('*');
-  for (var p = 0; p < allElements.length; p++) {
-    var txt = (allElements[p].textContent || '').trim().toLowerCase();
-    if (txt.length < 50 && (txt.indexOf('quick') >= 0 || txt.indexOf('pricer') >= 0 || txt.indexOf('pricing') >= 0 || txt.indexOf('scenario') >= 0)) {
-      pricerElements.push({
-        tag: allElements[p].tagName,
-        text: (allElements[p].textContent || '').trim().substring(0, 50),
-        cls: (allElements[p].className || '').substring(0, 60),
-        id: allElements[p].id || '',
-        routerLink: allElements[p].getAttribute('routerlink') || '',
-        clickable: !!(allElements[p].onclick || allElements[p].getAttribute('href') || allElements[p].getAttribute('routerlink'))
-      });
+  // Set PrimeNG dropdown value
+  async function setDropdown(labelText, optionText) {
+    var container = findField(labelText);
+    if (!container) { diag.fills.push(labelText + ': NOT_FOUND'); return false; }
+    var input = container.querySelector('input[type=text]');
+    if (!input) { diag.fills.push(labelText + ': NO_INPUT'); return false; }
+
+    // Check if already set to correct value
+    if (input.value === optionText) { diag.fills.push(labelText + ': ALREADY=' + optionText); return true; }
+
+    // Click to open dropdown
+    input.click();
+    await sleep(400);
+
+    // Find dropdown panel (PrimeNG renders overlay at body level)
+    var panels = document.querySelectorAll('.p-dropdown-panel, .p-overlay-panel, [class*=dropdown-panel]');
+    var panel = null;
+    for (var pi = 0; pi < panels.length; pi++) {
+      if (panels[pi].offsetHeight > 0) { panel = panels[pi]; break; }
+    }
+
+    if (!panel) {
+      // Try clicking the trigger icon instead
+      var trigger = container.querySelector('.p-dropdown-trigger, [class*=trigger]');
+      if (trigger) { trigger.click(); await sleep(400); }
+      panels = document.querySelectorAll('.p-dropdown-panel, .p-overlay-panel, [class*=dropdown-panel]');
+      for (var pi2 = 0; pi2 < panels.length; pi2++) {
+        if (panels[pi2].offsetHeight > 0) { panel = panels[pi2]; break; }
+      }
+    }
+
+    if (!panel) { diag.fills.push(labelText + ': NO_PANEL'); return false; }
+
+    // Find matching option
+    var items = panel.querySelectorAll('li, .p-dropdown-item, [class*=dropdown-item]');
+    var matched = false;
+    for (var oi = 0; oi < items.length; oi++) {
+      var itemText = (items[oi].textContent || '').trim();
+      if (itemText === optionText || itemText.indexOf(optionText) >= 0) {
+        items[oi].click();
+        matched = true;
+        diag.fills.push(labelText + ': ' + optionText);
+        break;
+      }
+    }
+
+    if (!matched) {
+      // Try partial match (case insensitive)
+      var lower = optionText.toLowerCase();
+      for (var oi2 = 0; oi2 < items.length; oi2++) {
+        if ((items[oi2].textContent || '').trim().toLowerCase().indexOf(lower) >= 0) {
+          items[oi2].click();
+          matched = true;
+          diag.fills.push(labelText + ': ~' + (items[oi2].textContent || '').trim());
+          break;
+        }
+      }
+    }
+
+    if (!matched) {
+      // Close panel by pressing Escape
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      var optTexts = [];
+      for (var x = 0; x < items.length && x < 10; x++) optTexts.push((items[x].textContent || '').trim());
+      diag.fills.push(labelText + ': NO_MATCH(' + optionText + ') avail=[' + optTexts.join(',') + ']');
+      return false;
+    }
+
+    await sleep(200);
+    return true;
+  }
+
+  // Set numeric input value
+  async function setNumeric(labelText, val) {
+    if (!val || val === '0') return;
+    var container = findField(labelText);
+    if (!container) { diag.fills.push(labelText + ': NOT_FOUND'); return false; }
+    var input = container.querySelector('input');
+    if (!input) { diag.fills.push(labelText + ': NO_INPUT'); return false; }
+    input.focus();
+    input.value = '';
+    var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    if (setter) setter.call(input, val);
+    input.dispatchEvent(new Event('input', {bubbles: true}));
+    input.dispatchEvent(new Event('change', {bubbles: true}));
+    input.dispatchEvent(new Event('blur', {bubbles: true}));
+    diag.fills.push(labelText + ': ' + val);
+    await sleep(150);
+    return true;
+  }
+
+  // Fill dropdown fields
+  var dropdowns = ['Purpose', 'Occupancy', 'Property Type', 'Income Doc', 'Citizenship', 'State', 'Escrows'];
+  for (var di = 0; di < dropdowns.length; di++) {
+    var key = dropdowns[di];
+    if (fieldMap[key]) {
+      await setDropdown(key, fieldMap[key]);
+      await sleep(300);
     }
   }
 
-  // Also check for Angular router-link attributes
-  var routerLinks = document.querySelectorAll('[routerlink], [ng-reflect-router-link]');
-  var routes = [];
-  for (var r = 0; r < routerLinks.length; r++) {
-    routes.push({
-      tag: routerLinks[r].tagName,
-      text: (routerLinks[r].textContent || '').trim().substring(0, 40),
-      route: routerLinks[r].getAttribute('routerlink') || routerLinks[r].getAttribute('ng-reflect-router-link') || ''
-    });
+  // Fill numeric fields
+  var numerics = ['Appraised Value', 'Purchase Price', 'First Lien Amount', 'FICO', 'DTI'];
+  for (var ni = 0; ni < numerics.length; ni++) {
+    var nkey = numerics[ni];
+    if (fieldMap[nkey]) {
+      await setNumeric(nkey, fieldMap[nkey]);
+    }
   }
 
-  // Dump form fields on current page
-  var formFields = [];
-  var inputs = document.querySelectorAll('input:not([type=hidden]), select, textarea');
-  for (var f = 0; f < inputs.length; f++) {
-    var fEl = inputs[f];
-    var label = '';
-    var labelEl = fEl.closest('label') || document.querySelector('label[for="' + fEl.id + '"]');
-    if (labelEl) label = (labelEl.textContent || '').trim();
-    if (!label) label = fEl.getAttribute('aria-label') || fEl.getAttribute('placeholder') || '';
-    formFields.push({
-      tag: fEl.tagName, id: fEl.id || '', name: fEl.name || '', type: fEl.type || '',
-      label: label.substring(0, 40), value: (fEl.value || '').substring(0, 30)
-    });
+  diag.steps.push('form_filled');
+
+  // Click "Get Price" button
+  var getPriceBtn = document.querySelector('button.quick-price-button') ||
+    document.querySelector('[class*=quick-price]') ||
+    null;
+  if (!getPriceBtn) {
+    var allBtns = document.querySelectorAll('button');
+    for (var bi = 0; bi < allBtns.length; bi++) {
+      if ((allBtns[bi].textContent || '').trim() === 'Get Price') { getPriceBtn = allBtns[bi]; break; }
+    }
+  }
+  if (getPriceBtn) {
+    getPriceBtn.click();
+    diag.steps.push('clicked_get_price');
+  } else {
+    diag.steps.push('no_get_price_button');
+    return JSON.stringify({ success: false, error: 'no_get_price_button', diag: diag });
   }
 
-  // Body text preview
-  var bodyPreview = (document.body.innerText || '').substring(0, 2000);
+  // Wait for results table to appear
+  var resultsFound = false;
+  for (var attempt = 0; attempt < 20; attempt++) {
+    await sleep(1500);
+    var tables = document.querySelectorAll('table');
+    for (var ti = 0; ti < tables.length; ti++) {
+      var rows = tables[ti].querySelectorAll('tr');
+      if (rows.length > 2) {
+        diag.steps.push('results_at: ' + ((attempt+1)*1.5) + 's, rows: ' + rows.length);
+        resultsFound = true;
+        break;
+      }
+    }
+    if (resultsFound) break;
+    // Also check for "no results" text
+    var body = (document.body.innerText || '');
+    if (body.indexOf('No results') >= 0 || body.indexOf('no eligible') >= 0 || body.indexOf('No prices') >= 0) {
+      diag.steps.push('no_results_text_at: ' + ((attempt+1)*1.5) + 's');
+      break;
+    }
+  }
 
-  return JSON.stringify({
-    navItems: navItems.slice(0, 30),
-    pricerElements: pricerElements.slice(0, 15),
-    routerLinks: routes,
-    formFields: formFields,
-    bodyPreview: bodyPreview,
-    diag: diag
-  });
+  if (!resultsFound) {
+    diag.steps.push('no_results_table');
+    diag.bodyPreview = (document.body.innerText || '').substring(0, 1500);
+    return JSON.stringify({ success: true, rates: [], diag: diag });
+  }
+
+  await sleep(1000); // settle
+
+  // Scrape the results table
+  var rates = [];
+  var tables = document.querySelectorAll('table');
+  for (var ti2 = 0; ti2 < tables.length; ti2++) {
+    var trs = tables[ti2].querySelectorAll('tr');
+    if (trs.length < 2) continue;
+    var ths = trs[0].querySelectorAll('th, td');
+    var headers = [];
+    for (var h = 0; h < ths.length; h++) headers.push((ths[h].textContent || '').trim());
+    diag.headers = headers;
+
+    for (var ri = 1; ri < trs.length && ri < 50; ri++) {
+      var tds = trs[ri].querySelectorAll('td');
+      if (tds.length < 3) continue;
+      var row = {};
+      for (var ci = 0; ci < tds.length && ci < headers.length; ci++) {
+        row[headers[ci] || 'col' + ci] = (tds[ci].textContent || '').trim();
+      }
+      rates.push(row);
+    }
+    if (rates.length > 0) break;
+  }
+
+  diag.steps.push('scraped: ' + rates.length + ' rows');
+  return JSON.stringify({ success: true, rates: rates, diag: diag });
 })()`
 }
 
@@ -205,30 +333,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!loannexUser || !loannexPassword) return res.json({ success: false, error: 'Credentials not configured' })
 
   try {
+    const body = req.body || {}
+    const fieldMap = mapFormToLN(body)
+
     const loginScript = buildLoginScript(loannexUser, loannexPassword)
     const waitScript = `(async function() { await new Promise(r => setTimeout(r, 5000)); return JSON.stringify({ ok: true }); })()`
     const navScript = buildNavToIframeScript()
-    const discoverScript = buildAngularDiscoverScript(loannexUser, loannexPassword)
+    const fillScript = buildFillAndScrapeScript(fieldMap)
 
-    // 5-step BQL:
-    // 1. goto wrapper login page
-    // 2. fill + click login (setTimeout avoids nav error)
-    // 3. wait for redirect (expected error)
-    // 4. extract iframe URL + navigate (expected error)
-    // 5. on Angular app: login + discover Quick Pricer nav
-    const bqlQuery = `mutation LoginAndDiscover {
+    const bqlQuery = `mutation FillAndPrice {
   loginPage: goto(url: "${LOANNEX_LOGIN_URL}", waitUntil: networkIdle) { status time }
   login: evaluate(content: ${JSON.stringify(loginScript)}, timeout: 8000) { value }
   waitForRedirect: evaluate(content: ${JSON.stringify(waitScript)}, timeout: 8000) { value }
   navToAngular: evaluate(content: ${JSON.stringify(navScript)}, timeout: 10000) { value }
-  discover: evaluate(content: ${JSON.stringify(discoverScript)}, timeout: 40000) { value }
+  price: evaluate(content: ${JSON.stringify(fillScript)}, timeout: 45000) { value }
 }`
 
     const bqlResp = await fetch(`${BROWSERLESS_URL}?token=${browserlessToken}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: bqlQuery }),
-      signal: AbortSignal.timeout(55000),
+      signal: AbortSignal.timeout(58000),
     })
 
     if (!bqlResp.ok) {
@@ -239,29 +364,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const bqlResult = await bqlResp.json()
 
     if (bqlResult.errors && !bqlResult.data) {
-      return res.json({ success: false, error: 'BQL error', debug: bqlResult.errors })
+      return res.json({ success: false, error: 'BQL error' })
     }
 
-    // Parse discover step result
-    let discoverData: any = null
+    // Parse results
+    let priceData: any = null
     try {
-      const raw = bqlResult.data?.discover?.value
-      discoverData = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : null
-    } catch { discoverData = null }
+      const raw = bqlResult.data?.price?.value
+      priceData = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : null
+    } catch { priceData = null }
 
-    const loginData = (() => {
-      try {
-        const raw = bqlResult.data?.login?.value
-        return raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : null
-      } catch { return null }
-    })()
+    if (!priceData) {
+      return res.json({ success: false, error: 'No data from pricing step' })
+    }
+
+    // Transform scraped table rows into rate options
+    const rates = priceData.rates || []
+    const rateOptions = rates.map((row: any) => {
+      // Parse rate: "6.000%\n30 Days" or "6.000%"
+      const rateField = row['Rate\nLock\nPeriod'] || row['Rate Lock Period'] || row['Rate'] || ''
+      const rateMatch = rateField.match(/([\d.]+)%/)
+      const lockMatch = rateField.match(/(\d+)\s*Days/)
+
+      // Parse price: "100.948\n$5,689.20" or just "100.948"
+      const priceField = row['Price'] || ''
+      const priceMatch = priceField.match(/([\d.]+)/)
+      const costMatch = priceField.match(/\$([\d,.]+)/)
+
+      // Parse product
+      const product = row['Product'] || ''
+
+      // Parse investor/program
+      const investorField = row['Investor/Lender Program'] || row['Investor'] || ''
+
+      // Parse payment
+      const pmtField = row['P&I PMT'] || row['Payment'] || ''
+      const pmtMatch = pmtField.match(/\$([\d,.]+)/)
+
+      return {
+        rate: rateMatch ? parseFloat(rateMatch[1]) : 0,
+        price: priceMatch ? parseFloat(priceMatch[1]) : 0,
+        cost: costMatch ? parseFloat(costMatch[1].replace(/,/g, '')) : 0,
+        lockPeriod: lockMatch ? parseInt(lockMatch[1]) : 30,
+        product: product,
+        investor: investorField,
+        payment: pmtMatch ? parseFloat(pmtMatch[1].replace(/,/g, '')) : 0,
+      }
+    }).filter((r: any) => r.rate > 0)
 
     return res.json({
       success: true,
-      mode: 'discovery',
-      login: loginData,
-      data: discoverData,
-      debug: { keys: Object.keys(bqlResult.data || {}), errors: bqlResult.errors || null }
+      data: {
+        rateOptions,
+        totalRates: rateOptions.length,
+        rawRows: rates.length,
+        diag: priceData.diag,
+      },
     })
   } catch (error) {
     console.error('LN pricing error:', error)
