@@ -561,7 +561,10 @@ export default function App() {
       ltv: parseFloat(formData.ltv) || 0,
       presentHousingExpense: isDSCR ? Number(formData.presentHousingExpense.replace(/,/g, '')) : undefined,
       grossRent: isDSCR ? Number(formData.grossRent.replace(/,/g, '')) : undefined,
+      dscrRatio: isDSCR ? calculatedDSCR.range : undefined,
+      dscrValue: isDSCR ? calculatedDSCR.ratio : undefined,
     }
+    console.log('[LN] Request:', requestBody)
     try {
       const resp = await fetch('/api/get-ln-pricing', {
         method: 'POST',
@@ -569,13 +572,15 @@ export default function App() {
         body: JSON.stringify(requestBody),
       })
       const data = await resp.json()
+      console.log('[LN] Response:', data)
       if (data.success && data.data) {
         setLnResult(data.data)
       } else {
-        setLnResult({ rateOptions: [], error: data.error || 'No rates returned' })
+        setLnResult({ rateOptions: [], error: data.error || 'No rates returned', debug: data.debug || data })
       }
     } catch (err) {
-      setLnResult({ rateOptions: [], error: 'PPE pricing unavailable' })
+      console.error('[LN] Error:', err)
+      setLnResult({ rateOptions: [], error: err instanceof Error ? err.message : 'PPE pricing unavailable' })
     } finally {
       setLnLoading(false)
     }
@@ -1856,11 +1861,17 @@ export default function App() {
                 <Card className="mt-6 border border-slate-700/40 bg-slate-900/50 text-white">
                   <CardContent className="py-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-500">PPE returned no rates for this scenario</span>
+                      <span className="text-xs text-slate-500">{lnResult.error || 'PPE returned no rates for this scenario'}</span>
                       <Button type="button" size="sm" variant="ghost" onClick={fetchLnPricing} className="text-xs text-purple-400 hover:text-purple-300 hover:bg-purple-600/10 h-7 px-2">
                         Retry
                       </Button>
                     </div>
+                    {lnResult.diag && (
+                      <details className="mt-2">
+                        <summary className="text-[10px] text-slate-600 cursor-pointer">Diagnostic</summary>
+                        <pre className="text-[10px] text-slate-600 mt-1 overflow-x-auto max-h-32 whitespace-pre-wrap">{JSON.stringify(lnResult.diag, null, 2)}</pre>
+                      </details>
+                    )}
                   </CardContent>
                 </Card>
               )}
