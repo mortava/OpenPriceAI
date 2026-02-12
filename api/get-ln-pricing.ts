@@ -29,8 +29,12 @@ function mapFormToLN(body: any): Record<string, string> {
 
   const isDSCR = body.documentationType === 'dscr'
   const isInvestment = body.occupancyType === 'investment'
+  const loanTypeMap: Record<string, string> = {
+    nonqm: 'Non-QM', conventional: 'Conventional', fha: 'FHA', va: 'VA',
+  }
 
   return {
+    'Loan Type': loanTypeMap[body.loanType] || 'Non-QM',
     'Purpose': purposeMap[body.loanPurpose] || 'Purchase',
     'Occupancy': occupancyMap[body.occupancyType] || 'Investment',
     'Property Type': propertyMap[body.propertyType] || 'SFR',
@@ -251,7 +255,7 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
     return null;
   }
 
-  // Set PrimeNG Autocomplete value by typing + selecting suggestion
+  // Set PrimeNG Autocomplete value by typing + keyboard selection
   async function setDropdown(labelText, optionText) {
     var field = findFieldInput(labelText);
     if (!field) { diag.fills.push(labelText + ': NOT_FOUND'); return false; }
@@ -261,28 +265,36 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
       input = field.el.querySelector ? field.el.querySelector('input') || field.el : field.el;
     }
 
-    // Clear the input first
+    // Focus and clear
     input.focus();
     input.dispatchEvent(new Event('focus', {bubbles: true}));
     await sleep(100);
 
-    // Clear existing value
+    // Select all text and delete it
+    input.select();
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true }));
+    await sleep(50);
+
+    // Clear via setter + input event
     var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
     if (setter) setter.call(input, '');
     input.dispatchEvent(new Event('input', {bubbles: true}));
-    await sleep(100);
+    await sleep(200);
 
-    // Type the search text to trigger autocomplete suggestions
-    if (setter) setter.call(input, optionText);
+    // Type the search text character by character to trigger autocomplete
+    // Use first 3 chars for faster search, or full text for exact match
+    var searchText = optionText.length > 3 ? optionText.substring(0, 3) : optionText;
+    if (setter) setter.call(input, searchText);
     input.dispatchEvent(new Event('input', {bubbles: true}));
     await sleep(600);
 
-    // Find the autocomplete suggestion panel
+    // Find visible autocomplete/popover panel
     function findPanel() {
       var selectors = [
         '.p-autocomplete-panel', '.p-autocomplete-overlay',
         '.p-overlay-panel', '[class*=autocomplete-panel]',
-        '.p-popover-content', '[role=listbox]'
+        '.p-popover-content', '[role=listbox]',
+        'ul.p-autocomplete-list'
       ];
       for (var si = 0; si < selectors.length; si++) {
         var matches = document.querySelectorAll(selectors[si]);
@@ -296,66 +308,70 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
     var panel = findPanel();
 
     if (!panel) {
-      // Try clicking the input to open suggestions
-      input.click();
-      await sleep(400);
+      // Type full text and try again
+      if (setter) setter.call(input, optionText);
+      input.dispatchEvent(new Event('input', {bubbles: true}));
+      await sleep(600);
       panel = findPanel();
     }
 
     if (!panel) {
-      // Fallback: press ArrowDown to open suggestions
+      // Try ArrowDown to open
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
       await sleep(400);
       panel = findPanel();
     }
 
-    if (!panel) {
-      diag.fills.push(labelText + ': NO_PANEL (typed: ' + optionText + ')');
-      // Try pressing Enter to force-select the typed value
-      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-      input.dispatchEvent(new Event('change', {bubbles: true}));
-      input.dispatchEvent(new Event('blur', {bubbles: true}));
-      return false;
-    }
-
-    // Find and click matching suggestion
-    var items = panel.querySelectorAll('li, .p-autocomplete-item, [class*=autocomplete-item], [class*=option]');
-    var matched = false;
-    for (var oi = 0; oi < items.length; oi++) {
-      var itemText = (items[oi].textContent || '').trim();
-      if (itemText === optionText || itemText.indexOf(optionText) >= 0) {
-        items[oi].click();
-        matched = true;
-        diag.fills.push(labelText + ': ' + optionText);
-        break;
-      }
-    }
-
-    if (!matched) {
-      // Case-insensitive partial match
-      var lower = optionText.toLowerCase();
-      for (var oi2 = 0; oi2 < items.length; oi2++) {
-        if ((items[oi2].textContent || '').trim().toLowerCase().indexOf(lower) >= 0) {
-          items[oi2].click();
-          matched = true;
-          diag.fills.push(labelText + ': ~' + (items[oi2].textContent || '').trim());
+    if (panel) {
+      // Find matching item and navigate to it with keyboard
+      var items = panel.querySelectorAll('li, [class*=autocomplete-item], [class*=option]');
+      var targetIdx = -1;
+      for (var oi = 0; oi < items.length; oi++) {
+        var itemText = (items[oi].textContent || '').trim();
+        if (itemText === optionText || itemText.indexOf(optionText) >= 0) {
+          targetIdx = oi;
           break;
         }
       }
+
+      if (targetIdx === -1) {
+        // Case-insensitive search
+        var lower = optionText.toLowerCase();
+        for (var oi2 = 0; oi2 < items.length; oi2++) {
+          if ((items[oi2].textContent || '').trim().toLowerCase().indexOf(lower) >= 0) {
+            targetIdx = oi2;
+            break;
+          }
+        }
+      }
+
+      if (targetIdx >= 0) {
+        // ArrowDown to navigate to the item, then Enter to select
+        for (var ad = 0; ad <= targetIdx; ad++) {
+          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+          await sleep(50);
+        }
+        await sleep(100);
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        await sleep(200);
+        diag.fills.push(labelText + ': ' + optionText + ' (kbd)');
+        return true;
+      } else {
+        var optTexts = [];
+        for (var x = 0; x < items.length && x < 10; x++) optTexts.push((items[x].textContent || '').trim());
+        diag.fills.push(labelText + ': NO_MATCH(' + optionText + ') avail=[' + optTexts.join(',') + ']');
+      }
+    } else {
+      diag.fills.push(labelText + ': NO_PANEL');
     }
 
-    if (!matched) {
-      var optTexts = [];
-      for (var x = 0; x < items.length && x < 10; x++) optTexts.push((items[x].textContent || '').trim());
-      diag.fills.push(labelText + ': NO_MATCH(' + optionText + ') avail=[' + optTexts.join(',') + ']');
-      // Close panel and try Enter to force-select
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-      return false;
-    }
-
-    await sleep(200);
-    return true;
+    // Last resort: set value directly and blur
+    if (setter) setter.call(input, optionText);
+    input.dispatchEvent(new Event('input', {bubbles: true}));
+    input.dispatchEvent(new Event('change', {bubbles: true}));
+    input.dispatchEvent(new Event('blur', {bubbles: true}));
+    await sleep(100);
+    return false;
   }
 
   // Set numeric input value
@@ -381,7 +397,7 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
   }
 
   // Fill dropdown fields
-  var dropdowns = ['Purpose', 'Occupancy', 'Property Type', 'Income Doc', 'Citizenship', 'State', 'Escrows', 'Prepay Penalty'];
+  var dropdowns = ['Loan Type', 'Purpose', 'Occupancy', 'Property Type', 'Income Doc', 'Citizenship', 'State', 'Escrows', 'Prepay Penalty'];
   for (var di = 0; di < dropdowns.length; di++) {
     var key = dropdowns[di];
     if (fieldMap[key]) {
