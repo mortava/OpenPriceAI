@@ -662,13 +662,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const pmtField = findCol(row, ['pmt', 'payment'])
       const pmtMatch = pmtField.match(/\$([\d,.]+)/)
 
+      // Clean double spaces from collapsed newlines in scraped text
+      const cleanText = (s: string) => s.replace(/\s{2,}/g, ' ').trim()
+
       return {
         rate: rateMatch ? parseFloat(rateMatch[1]) : 0,
         price: priceMatch ? parseFloat(priceMatch[1]) : 0,
         cost: costMatch ? parseFloat(costMatch[1].replace(/,/g, '')) : 0,
         lockPeriod: lockMatch ? parseInt(lockMatch[1]) : 30,
-        product: product,
-        investor: investorField,
+        program: cleanText(product),
+        investor: cleanText(investorField),
         payment: pmtMatch ? parseFloat(pmtMatch[1].replace(/,/g, '')) : 0,
       }
     }).filter((r: any) => r.rate > 0)
