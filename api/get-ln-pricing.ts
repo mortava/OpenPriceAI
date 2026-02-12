@@ -138,12 +138,52 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
       diag.steps.push('has_get_price: ' + hasQuickPricer);
 
       if (!hasQuickPricer) {
-        // After login we're on Lock Desk. Navigate to Quick Pricer via URL.
-        // Schedule navigation back to nex-app (Quick Pricer) and return before nav happens.
+        // After login we're on Lock Desk. Use Angular's client-side routing
+        // (History API + popstate) to navigate WITHOUT a page reload, keeping
+        // this script context alive so we can continue filling the form.
         diag.steps.push('on_lock_desk_navigating_to_qp');
-        setTimeout(function() { window.location.href = '/nex-app'; }, 200);
-        // Return now — the NEXT BQL evaluate step will run on the Quick Pricer page
-        return JSON.stringify({ success: true, needsNextStep: true, rates: [], diag: diag });
+
+        // Strategy 1: Click any visible Quick Pricer / nex-app link
+        var navClicked = false;
+        var allLinks = document.querySelectorAll('a[href], [routerLink]');
+        for (var nl = 0; nl < allLinks.length; nl++) {
+          var href = allLinks[nl].getAttribute('href') || allLinks[nl].getAttribute('routerLink') || '';
+          if (href.indexOf('nex-app') >= 0 || href.indexOf('quick-pricer') >= 0) {
+            allLinks[nl].click();
+            navClicked = true;
+            diag.steps.push('clicked_nav_link: ' + href);
+            break;
+          }
+        }
+
+        // Strategy 2: Try Angular router via History API
+        if (!navClicked) {
+          window.history.pushState({}, '', '/nex-app');
+          window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+          diag.steps.push('history_pushstate_to_nex_app');
+        }
+
+        // Wait for the Quick Pricer form to appear (Angular client-side routing)
+        var qpLoaded = false;
+        for (var qw = 0; qw < 10; qw++) {
+          await sleep(1500);
+          var qpInputs = document.querySelectorAll('input:not([type=hidden])');
+          var qpText = (document.body.innerText || '');
+          if (qpText.indexOf('Get Price') >= 0 && qpInputs.length > 10) {
+            diag.steps.push('qp_loaded_at: ' + ((qw+1)*1.5) + 's, fields: ' + qpInputs.length);
+            qpLoaded = true;
+            break;
+          }
+        }
+
+        if (!qpLoaded) {
+          // Fallback: hard navigation (kills script, relies on retry steps)
+          diag.steps.push('qp_not_loaded_falling_back_to_hard_nav');
+          setTimeout(function() { window.location.href = '/nex-app'; }, 200);
+          return JSON.stringify({ success: true, needsNextStep: true, rates: [], diag: diag });
+        }
+
+        formReady = true;
       } else {
         formReady = true;
       }
@@ -493,7 +533,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const fillScript = buildFillAndScrapeScript(fieldMap, loannexUser, loannexPassword)
 
     // Step 6: retry fill script (runs if step 5 navigated to /nex-app after Angular login)
-    const retryWait = `(async function() { await new Promise(r => setTimeout(r, 3000)); return JSON.stringify({ ok: true }); })()`
+    const retryWait = `(async function() { await new Promise(r => setTimeout(r, 8000)); return JSON.stringify({ ok: true }); })()`
     const retryFillScript = buildFillAndScrapeScript(fieldMap, loannexUser, loannexPassword)
 
     const bqlQuery = `mutation FillAndPrice {
@@ -599,6 +639,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         usedStep,
         diag: priceData.diag,
         retryDiag: usedStep === 'price' ? (retryRaw?.diag || null) : null,
+        bqlErrors: (bqlResult.errors || []).map((e: any) => ({ msg: (e.message || '').substring(0, 80), path: e.path })).slice(0, 5),
       },
     })
   } catch (error) {
