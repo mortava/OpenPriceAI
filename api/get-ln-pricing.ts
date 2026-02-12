@@ -458,8 +458,8 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
   diag.allFieldLabels = allLabels;
   diag.steps.push('post_incomedoc_fields: ' + allLabels.length);
 
-  // Fill remaining dropdowns
-  var dropdowns2 = ['Citizenship', 'State', 'County', 'Escrows'];
+  // Fill remaining dropdowns (includes DSCR-specific fields that appeared after Income Doc selection)
+  var dropdowns2 = ['Citizenship', 'State', 'County', 'Escrows', 'Prepay Penalty'];
   for (var di2 = 0; di2 < dropdowns2.length; di2++) {
     var key2 = dropdowns2[di2];
     if (fieldMap[key2]) {
@@ -468,8 +468,9 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
     }
   }
 
-  // Fill numeric fields (based on discovered field labels)
-  var numerics = ['Appraised Value', 'Purchase Price', 'First Lien Amount', 'FICO', 'DTI', 'Months Reserves'];
+  // Fill numeric fields (includes DSCR-specific fields discovered after Income Doc selection)
+  var numerics = ['Appraised Value', 'Purchase Price', 'First Lien Amount', 'FICO', 'DTI',
+    'Months Reserves', 'DSCR', 'Mo. Rental Income', '# of Financed Properties'];
   for (var ni = 0; ni < numerics.length; ni++) {
     var nkey = numerics[ni];
     if (fieldMap[nkey]) {
@@ -479,14 +480,14 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
 
   diag.steps.push('form_filled');
 
-  // Readback: verify actual input values to check Angular model state
+  // Readback: verify actual input values (prefer p-autocomplete-input for dropdowns)
   var readback = {};
   var rbFields = document.querySelectorAll('.nex-app-field');
   for (var rbi = 0; rbi < rbFields.length; rbi++) {
     var rbLabel = rbFields[rbi].querySelector('label');
     if (!rbLabel) continue;
     var rbName = (rbLabel.textContent || '').trim();
-    var rbInput = rbFields[rbi].querySelector('input:not([type=hidden])');
+    var rbInput = rbFields[rbi].querySelector('.p-autocomplete-input, input.p-inputtext, input:not([type=hidden]):not([type=checkbox])');
     if (rbInput) {
       readback[rbName] = rbInput.value || '(empty)';
     }
