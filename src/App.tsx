@@ -1655,7 +1655,7 @@ export default function App() {
                     price: safeNumber(opt.price) - 0.625,
                   }))
                 const filteredLpRates = adjustedLpRates.filter(
-                  (opt: any) => opt.price >= 99.75 && opt.price <= priceCeiling
+                  (opt: any) => opt.price >= 99.000 && opt.price <= priceCeiling
                 )
                 const closestPrice = filteredLpRates.length > 0
                   ? Math.min(...filteredLpRates.map((o: any) => Math.abs(o.price - 100)))
