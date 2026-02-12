@@ -46,6 +46,7 @@ function mapFormToLN(body: any): Record<string, string> {
     'Income Doc': docMap[body.documentationType] || 'DSCR',
     'Citizenship': citizenMap[body.citizenship] || 'US Citizen',
     'State': body.propertyState || 'CA',
+    'County': body.county || 'Los Angeles',
     'Appraised Value': propertyValue,
     'Purchase Price': body.loanPurpose === 'purchase' ? propertyValue : '',
     'First Lien Amount': loanAmount,
@@ -432,8 +433,8 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
   diag.allFieldLabels = allLabels;
   diag.steps.push('post_incomedoc_fields: ' + allLabels.length);
 
-  // Fill remaining dropdowns (these may include dynamic DSCR fields)
-  var dropdowns2 = ['Citizenship', 'State', 'Escrows', 'Prepay Penalty', 'Prepayment Penalty'];
+  // Fill remaining dropdowns
+  var dropdowns2 = ['Citizenship', 'State', 'County', 'Escrows'];
   for (var di2 = 0; di2 < dropdowns2.length; di2++) {
     var key2 = dropdowns2[di2];
     if (fieldMap[key2]) {
@@ -442,12 +443,8 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
     }
   }
 
-  // Fill numeric fields (try multiple label variants for DSCR fields)
-  var numerics = ['Appraised Value', 'Purchase Price', 'First Lien Amount', 'FICO', 'DTI',
-    'DSCR', 'DSCR Ratio', 'DSCR %',
-    'Mo. Rental Income', 'Monthly Rental Income', 'Gross Rental Income',
-    'Months Reserves', 'Reserves',
-    '# of Financed Properties', 'Number of Financed Properties', 'Financed Properties'];
+  // Fill numeric fields (based on discovered field labels)
+  var numerics = ['Appraised Value', 'Purchase Price', 'First Lien Amount', 'FICO', 'DTI', 'Months Reserves'];
   for (var ni = 0; ni < numerics.length; ni++) {
     var nkey = numerics[ni];
     if (fieldMap[nkey]) {
@@ -456,6 +453,20 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
   }
 
   diag.steps.push('form_filled');
+
+  // Readback: verify actual input values to check Angular model state
+  var readback = {};
+  var rbFields = document.querySelectorAll('.nex-app-field');
+  for (var rbi = 0; rbi < rbFields.length; rbi++) {
+    var rbLabel = rbFields[rbi].querySelector('label');
+    if (!rbLabel) continue;
+    var rbName = (rbLabel.textContent || '').trim();
+    var rbInput = rbFields[rbi].querySelector('input:not([type=hidden])');
+    if (rbInput) {
+      readback[rbName] = rbInput.value || '(empty)';
+    }
+  }
+  diag.readback = readback;
 
   // Click "Get Price" button
   var getPriceBtn = document.querySelector('button.quick-price-button') ||
