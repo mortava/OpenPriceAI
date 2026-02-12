@@ -156,64 +156,39 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
     return JSON.stringify({ success: false, error: 'form_not_loaded', rates: [], diag: diag });
   }
 
-  // DOM structure diagnostic — understand the PrimeNG form layout
+  // DOM diagnostics — understand the dropdown component type
   var domInfo = {};
   domInfo.pDropdowns = document.querySelectorAll('p-dropdown, .p-dropdown').length;
+  domInfo.pSelects = document.querySelectorAll('p-select, .p-select').length;
+  domInfo.pPopovers = document.querySelectorAll('p-popover, .p-popover').length;
   domInfo.pInputNumbers = document.querySelectorAll('p-inputnumber, .p-inputnumber').length;
   domInfo.visibleInputs = document.querySelectorAll('input:not([type=hidden])').length;
-  domInfo.allInputs = document.querySelectorAll('input').length;
   domInfo.selects = document.querySelectorAll('select').length;
+  domInfo.nexAppFields = document.querySelectorAll('.nex-app-field').length;
 
-  // Find label elements and their surrounding DOM structure
-  var labelSamples = [];
-  var targetLabels = ['Purpose', 'FICO', 'Appraised Value'];
-  for (var tl = 0; tl < targetLabels.length; tl++) {
-    var targetLabel = targetLabels[tl];
-    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-    var node;
-    while (node = walker.nextNode()) {
-      if (node.textContent.trim() === targetLabel) {
-        var parent = node.parentElement;
-        var gp = parent ? parent.parentElement : null;
-        var ggp = gp ? gp.parentElement : null;
-        var sample = {
-          label: targetLabel,
-          parentTag: parent ? parent.tagName + '.' + (parent.className || '').substring(0, 80) : 'none',
-          parentHTML: parent ? parent.outerHTML.substring(0, 200) : 'none',
-          gpTag: gp ? gp.tagName + '.' + (gp.className || '').substring(0, 80) : 'none',
-          gpChildTags: [],
-          ggpTag: ggp ? ggp.tagName + '.' + (ggp.className || '').substring(0, 80) : 'none',
-          ggpChildTags: [],
-        };
-        if (gp) {
-          for (var gc = 0; gc < gp.children.length && gc < 5; gc++) {
-            sample.gpChildTags.push(gp.children[gc].tagName + '.' + (gp.children[gc].className || '').substring(0, 40));
-          }
-        }
-        if (ggp) {
-          for (var ggc = 0; ggc < ggp.children.length && ggc < 5; ggc++) {
-            sample.ggpChildTags.push(ggp.children[ggc].tagName + '.' + (ggp.children[ggc].className || '').substring(0, 40));
-          }
-        }
-        labelSamples.push(sample);
-        break;
-      }
+  // Dump the Purpose field's nex-app-field innerHTML to see actual dropdown component
+  var purposeField = null;
+  var nexFields = document.querySelectorAll('.nex-app-field');
+  for (var nf = 0; nf < nexFields.length; nf++) {
+    if ((nexFields[nf].textContent || '').indexOf('Purpose') >= 0) {
+      purposeField = nexFields[nf];
+      break;
     }
   }
-  domInfo.labelSamples = labelSamples;
-
-  // Also grab the first p-dropdown's DOM context
-  var firstDropdown = document.querySelector('p-dropdown') || document.querySelector('.p-dropdown');
-  if (firstDropdown) {
-    var dp = firstDropdown.parentElement;
-    var dgp = dp ? dp.parentElement : null;
-    domInfo.firstDropdown = {
-      tag: firstDropdown.tagName + '.' + (firstDropdown.className || '').substring(0, 80),
-      parentTag: dp ? dp.tagName + '.' + (dp.className || '').substring(0, 80) : 'none',
-      gpTag: dgp ? dgp.tagName + '.' + (dgp.className || '').substring(0, 80) : 'none',
-      prevSiblingText: firstDropdown.previousElementSibling ? (firstDropdown.previousElementSibling.textContent || '').trim().substring(0, 30) : 'none',
-      parentText: dp ? (dp.textContent || '').trim().substring(0, 50) : 'none',
-    };
+  if (purposeField) {
+    // Get child element tags and classes
+    var purposeChildren = [];
+    for (var pc = 0; pc < purposeField.children.length; pc++) {
+      var child = purposeField.children[pc];
+      purposeChildren.push(child.tagName + '.' + (child.className || '').substring(0, 60));
+    }
+    domInfo.purposeChildren = purposeChildren;
+    // Get the second child (likely the dropdown component wrapper)
+    var ddWrapper = purposeField.children.length > 1 ? purposeField.children[1] : null;
+    if (ddWrapper) {
+      domInfo.ddWrapperHTML = ddWrapper.innerHTML.substring(0, 500);
+      domInfo.ddWrapperTag = ddWrapper.tagName + '.' + (ddWrapper.className || '').substring(0, 60);
+    }
   }
 
   diag.domInfo = domInfo;
@@ -234,8 +209,8 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
         var container = levels[lvl];
         if (!container) continue;
 
-        // Look for PrimeNG dropdown
-        var pDropdown = container.querySelector('p-dropdown, .p-dropdown');
+        // Look for PrimeNG dropdown/select
+        var pDropdown = container.querySelector('p-dropdown, .p-dropdown, p-select, .p-select');
         if (pDropdown) return { el: pDropdown, type: 'dropdown', container: container };
 
         // Look for PrimeNG input number
@@ -253,7 +228,7 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
       // Last resort: check next siblings of the label element
       var sib = labelEl.nextElementSibling;
       for (var s = 0; s < 3 && sib; s++) {
-        var pDrop = sib.querySelector ? sib.querySelector('p-dropdown, .p-dropdown') : null;
+        var pDrop = sib.querySelector ? sib.querySelector('p-dropdown, .p-dropdown, p-select, .p-select') : null;
         if (pDrop) return { el: pDrop, type: 'dropdown', container: sib };
         var pNum = sib.querySelector ? sib.querySelector('p-inputnumber, .p-inputnumber, input:not([type=hidden])') : null;
         if (pNum) {
@@ -273,29 +248,48 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
     if (!field) { diag.fills.push(labelText + ': NOT_FOUND'); return false; }
 
     var dropdownEl = field.el;
-    // For PrimeNG dropdowns: click the dropdown element to open
+    diag.fills.push(labelText + ': clicking ' + dropdownEl.tagName + '.' + (dropdownEl.className || '').substring(0, 40));
+
+    // Click the element to open dropdown/popover
     dropdownEl.click();
-    await sleep(400);
+    await sleep(500);
 
-    // Also try clicking inner trigger if panel didn't open
-    var trigger = dropdownEl.querySelector ? dropdownEl.querySelector('.p-dropdown-trigger') : null;
-    if (trigger) { trigger.click(); await sleep(200); }
+    // Search for ANY visible overlay panel (PrimeNG uses many panel types)
+    function findPanel() {
+      var selectors = [
+        '.p-dropdown-panel', '.p-select-overlay', '.p-popover-content',
+        '.p-overlay-panel', '.p-listbox', '[class*=dropdown-panel]',
+        '[class*=select-overlay]', '[class*=popover]'
+      ];
+      for (var si = 0; si < selectors.length; si++) {
+        var matches = document.querySelectorAll(selectors[si]);
+        for (var mi = 0; mi < matches.length; mi++) {
+          if (matches[mi].offsetHeight > 0 && matches[mi].offsetWidth > 0) return matches[mi];
+        }
+      }
+      // Check for any recently-appeared overlay with list items
+      var allOverlays = document.querySelectorAll('[role=listbox], [role=menu], ul.p-listbox-list');
+      for (var ai = 0; ai < allOverlays.length; ai++) {
+        if (allOverlays[ai].offsetHeight > 0) return allOverlays[ai];
+      }
+      return null;
+    }
 
-    // Find dropdown panel (PrimeNG renders overlay at body level)
-    var panels = document.querySelectorAll('.p-dropdown-panel, .p-overlay-panel, [class*=dropdown-panel]');
-    var panel = null;
-    for (var pi = 0; pi < panels.length; pi++) {
-      if (panels[pi].offsetHeight > 0) { panel = panels[pi]; break; }
+    var panel = findPanel();
+
+    if (!panel) {
+      // Try clicking the container or a trigger icon
+      var container = field.container;
+      var trigger = container.querySelector('[class*=trigger], [class*=chevron], .p-icon');
+      if (trigger) { trigger.click(); await sleep(500); panel = findPanel(); }
     }
 
     if (!panel) {
-      // Try clicking the trigger icon from the container
-      var trigger2 = field.container.querySelector('.p-dropdown-trigger, [class*=trigger]');
-      if (trigger2) { trigger2.click(); await sleep(400); }
-      panels = document.querySelectorAll('.p-dropdown-panel, .p-overlay-panel, [class*=dropdown-panel]');
-      for (var pi2 = 0; pi2 < panels.length; pi2++) {
-        if (panels[pi2].offsetHeight > 0) { panel = panels[pi2]; break; }
-      }
+      // Try focus + ArrowDown to open
+      dropdownEl.focus();
+      dropdownEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      await sleep(500);
+      panel = findPanel();
     }
 
     if (!panel) { diag.fills.push(labelText + ': NO_PANEL'); return false; }
