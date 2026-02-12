@@ -1635,7 +1635,7 @@ export default function App() {
                   })
                   .map((opt: any) => ({
                     ...opt,
-                    price: safeNumber(opt.price) - 0.125,
+                    price: safeNumber(opt.price) - 0.625,
                   }))
                 const filteredLpRates = adjustedLpRates.filter(
                   (opt: any) => opt.price >= 99.75 && opt.price <= priceCeiling
@@ -1853,14 +1853,11 @@ export default function App() {
               )}
 
               {lnUnlocked && !lnLoading && lnResult && (!lnResult.rateOptions || lnResult.rateOptions.length === 0) && (
-                <Card className="mt-6 border border-purple-600/20 bg-gradient-to-br from-purple-950/20 via-slate-900 to-slate-900 text-white">
-                  <CardContent className="py-6">
-                    <div className="flex flex-col items-center gap-2">
-                      <Globe className="w-5 h-5 text-purple-400/50" />
-                      <p className="text-sm text-slate-400 text-center">
-                        {lnResult.error || 'No rates available for this scenario'}
-                      </p>
-                      <Button type="button" size="sm" variant="outline" onClick={fetchLnPricing} className="mt-2 border-purple-600/40 text-purple-300 hover:bg-purple-600/10">
+                <Card className="mt-6 border border-slate-700/40 bg-slate-900/50 text-white">
+                  <CardContent className="py-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">PPE returned no rates for this scenario</span>
+                      <Button type="button" size="sm" variant="ghost" onClick={fetchLnPricing} className="text-xs text-purple-400 hover:text-purple-300 hover:bg-purple-600/10 h-7 px-2">
                         Retry
                       </Button>
                     </div>
