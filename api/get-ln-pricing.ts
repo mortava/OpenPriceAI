@@ -353,19 +353,44 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
       }
 
       if (targetIdx >= 0) {
-        // ArrowDown to navigate to the item, then Enter to select
-        for (var ad = 0; ad <= targetIdx; ad++) {
-          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
-          await sleep(50);
+        var targetItem = items[targetIdx];
+
+        // Method 1: Click the suggestion item directly
+        targetItem.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+        await sleep(50);
+        targetItem.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+        targetItem.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+        await sleep(300);
+
+        var afterVal = (input.value || '').trim();
+        if (afterVal.length > searchText.length || afterVal.toLowerCase().indexOf(optionText.substring(0, 3).toLowerCase()) >= 0) {
+          input.dispatchEvent(new Event('blur', {bubbles: true}));
+          await sleep(100);
+          diag.fills.push(labelText + ': ' + optionText + ' (click, val=' + afterVal + ')');
+          return true;
         }
-        await sleep(100);
-        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-        await sleep(200);
-        // Close panel and blur to ensure clean state for next field
+
+        // Method 2: Try keyboard ArrowDown + Enter as fallback
+        input.focus();
+        if (setter) setter.call(input, searchText);
+        input.dispatchEvent(new Event('input', {bubbles: true}));
+        await sleep(600);
+        panel = findMyPanel();
+        if (panel) {
+          for (var ad = 0; ad <= targetIdx; ad++) {
+            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+            await sleep(50);
+          }
+          await sleep(100);
+          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+          await sleep(200);
+        }
+
+        var afterVal2 = (input.value || '').trim();
         input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
         input.dispatchEvent(new Event('blur', {bubbles: true}));
         await sleep(100);
-        diag.fills.push(labelText + ': ' + optionText + ' (kbd)');
+        diag.fills.push(labelText + ': ' + optionText + ' (kbd, val=' + afterVal2 + ')');
         return true;
       } else {
         var optTexts = [];
