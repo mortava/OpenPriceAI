@@ -151,45 +151,6 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
     return JSON.stringify({ success: false, error: 'form_not_loaded', rates: [], diag: diag });
   }
 
-  if (!isRetry) {
-  // DOM diagnostics — understand the dropdown component type
-  var domInfo = {};
-  domInfo.pDropdowns = document.querySelectorAll('p-dropdown, .p-dropdown').length;
-  domInfo.pSelects = document.querySelectorAll('p-select, .p-select').length;
-  domInfo.pPopovers = document.querySelectorAll('p-popover, .p-popover').length;
-  domInfo.pInputNumbers = document.querySelectorAll('p-inputnumber, .p-inputnumber').length;
-  domInfo.visibleInputs = document.querySelectorAll('input:not([type=hidden])').length;
-  domInfo.selects = document.querySelectorAll('select').length;
-  domInfo.nexAppFields = document.querySelectorAll('.nex-app-field').length;
-
-  // Dump the Purpose field's nex-app-field innerHTML to see actual dropdown component
-  var purposeField = null;
-  var nexFields = document.querySelectorAll('.nex-app-field');
-  for (var nf = 0; nf < nexFields.length; nf++) {
-    if ((nexFields[nf].textContent || '').indexOf('Purpose') >= 0) {
-      purposeField = nexFields[nf];
-      break;
-    }
-  }
-  if (purposeField) {
-    // Get child element tags and classes
-    var purposeChildren = [];
-    for (var pc = 0; pc < purposeField.children.length; pc++) {
-      var child = purposeField.children[pc];
-      purposeChildren.push(child.tagName + '.' + (child.className || '').substring(0, 60));
-    }
-    domInfo.purposeChildren = purposeChildren;
-    // Get the second child (likely the dropdown component wrapper)
-    var ddWrapper = purposeField.children.length > 1 ? purposeField.children[1] : null;
-    if (ddWrapper) {
-      domInfo.ddWrapperHTML = ddWrapper.innerHTML.substring(0, 500);
-      domInfo.ddWrapperTag = ddWrapper.tagName + '.' + (ddWrapper.className || '').substring(0, 60);
-    }
-  }
-
-  diag.domInfo = domInfo;
-  } // end !isRetry DOM diagnostics
-
   // Find field input by label text — walk DOM to find associated PrimeNG component
   function findFieldInput(labelText) {
     // Strategy: find text node matching label, then walk up to find container with input/dropdown
@@ -264,11 +225,6 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
     if (setter) setter.call(input, '');
     input.dispatchEvent(new Event('input', {bubbles: true}));
     await sleep(200);
-
-    // Log input context for debugging
-    var ariaCtrl = input.getAttribute('aria-controls') || input.getAttribute('aria-owns') || 'none';
-    var nexField = input.closest('.nex-app-field');
-    diag.fills.push(labelText + ': aria=' + ariaCtrl + ', nex=' + (nexField ? 'yes' : 'no'));
 
     // Type the search text to trigger autocomplete suggestions
     var searchText = optionText.length > 3 ? optionText.substring(0, 3) : optionText;
@@ -448,16 +404,6 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
   // Wait for Angular to re-render dynamic fields based on Income Doc selection
   await sleep(1500);
 
-  // Dump all visible field labels for discovery
-  var allNexFields = document.querySelectorAll('.nex-app-field');
-  var allLabels = [];
-  for (var lfi = 0; lfi < allNexFields.length; lfi++) {
-    var lbl = allNexFields[lfi].querySelector('label');
-    if (lbl) allLabels.push((lbl.textContent || '').trim());
-  }
-  diag.allFieldLabels = allLabels;
-  diag.steps.push('post_incomedoc_fields: ' + allLabels.length);
-
   // Fill remaining dropdowns (includes DSCR-specific fields that appeared after Income Doc selection)
   var dropdowns2 = ['Citizenship', 'State', 'County', 'Escrows', 'Prepay Penalty'];
   for (var di2 = 0; di2 < dropdowns2.length; di2++) {
@@ -479,20 +425,6 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
   }
 
   diag.steps.push('form_filled');
-
-  // Readback: verify actual input values (prefer p-autocomplete-input for dropdowns)
-  var readback = {};
-  var rbFields = document.querySelectorAll('.nex-app-field');
-  for (var rbi = 0; rbi < rbFields.length; rbi++) {
-    var rbLabel = rbFields[rbi].querySelector('label');
-    if (!rbLabel) continue;
-    var rbName = (rbLabel.textContent || '').trim();
-    var rbInput = rbFields[rbi].querySelector('.p-autocomplete-input, input.p-inputtext, input:not([type=hidden]):not([type=checkbox])');
-    if (rbInput) {
-      readback[rbName] = rbInput.value || '(empty)';
-    }
-  }
-  diag.readback = readback;
 
   // Click "Get Price" button
   var getPriceBtn = document.querySelector('button.quick-price-button') ||
@@ -554,25 +486,6 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
   }
 
   await sleep(500); // settle
-
-  // Capture page content after results appear
-  var fullText = (document.body.innerText || '');
-  var gpIdx = fullText.indexOf('Get Price');
-  diag.afterGetPrice = gpIdx >= 0 ? fullText.substring(gpIdx, gpIdx + 2000) : fullText.substring(Math.max(0, fullText.length - 2000));
-
-  // Log table-like structures found
-  var allTableLike = document.querySelectorAll('table, p-table, .p-datatable, [class*=results], [class*=pricing]');
-  diag.tableLikeCount = allTableLike.length;
-  if (allTableLike.length > 0) {
-    diag.tableLike = [];
-    for (var tt = 0; tt < allTableLike.length && tt < 3; tt++) {
-      diag.tableLike.push({
-        tag: allTableLike[tt].tagName + '.' + (allTableLike[tt].className || '').substring(0, 60),
-        rows: allTableLike[tt].querySelectorAll('tr').length,
-        text: (allTableLike[tt].textContent || '').substring(0, 300)
-      });
-    }
-  }
 
   // Scrape the results table
   var rates = [];
