@@ -513,13 +513,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (responseText.includes('status=&quot;Error&quot;') || responseText.includes('status="Error"')) {
-      const errorMatch = responseText.match(/Error[>"']>([^<]+)</)
-      // Try multiple patterns to extract error message
-      const msgMatch = responseText.match(/Message[>=&quot;"]+>([^<]+)</) || responseText.match(/Description[>=&quot;"]+>([^<]+)</)
-      const mlError = errorMatch?.[1] || msgMatch?.[1] || 'Unknown pricing error'
-      // Include snippet of raw response for debugging
-      const errorContext = responseText.substring(responseText.indexOf('Error') - 50, responseText.indexOf('Error') + 300).replace(/<[^>]+>/g, ' ').replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim()
-      return res.json({ success: false, error: mlError, errorContext: errorContext.substring(0, 200) })
+      // Handle both regular XML and double-escaped XML (MeridianLink returns double-escaped)
+      const errorMatch = responseText.match(/Error[>"']>([^<]+)</) || responseText.match(/Error&gt;([^&]+)&lt;/)
+      const mlError = errorMatch?.[1] || 'Unknown pricing error'
+      return res.json({ success: false, error: mlError })
     }
 
     const resultMatch = responseText.match(/<RunQuickPricerV2Result>([\s\S]*?)<\/RunQuickPricerV2Result>/)

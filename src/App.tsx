@@ -520,29 +520,41 @@ export default function App() {
       })
       .finally(() => setLpLoading(false))
 
-    // ML fires in parallel
-    try {
-      const mlResponse = await fetch('/api/get-pricing', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: bodyJson,
-      })
-      const mlData = await mlResponse.json()
-
-      if (mlData.success) {
-        const sanitizedResult = sanitizePricingResult(mlData.data)
-        if (sanitizedResult) {
-          setResult(sanitizedResult)
-        } else {
-          setError('Invalid pricing response from server')
-        }
-      } else {
-        setError(mlData.error || 'Pricing request failed')
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to get pricing')
-    } finally {
+    // ML fires in parallel (skip for 5+ units — ML doesn't support them)
+    const is5PlusUnits = formData.propertyType === '5-9unit'
+    if (is5PlusUnits) {
+      // Set minimal result so LP/LN sections still render
+      setResult({
+        programs: [],
+        totalPrograms: 0,
+        source: 'meridianlink',
+        mlSkipped: true,
+      } as any)
       setIsLoading(false)
+    } else {
+      try {
+        const mlResponse = await fetch('/api/get-pricing', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: bodyJson,
+        })
+        const mlData = await mlResponse.json()
+
+        if (mlData.success) {
+          const sanitizedResult = sanitizePricingResult(mlData.data)
+          if (sanitizedResult) {
+            setResult(sanitizedResult)
+          } else {
+            setError('Invalid pricing response from server')
+          }
+        } else {
+          setError(mlData.error || 'Pricing request failed')
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to get pricing')
+      } finally {
+        setIsLoading(false)
+      }
     }
   }
 
