@@ -726,26 +726,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Transform scraped table rows into rate options
+    // Header names vary (e.g. "Rate  Lock Period 1", "Price 2") — use keyword matching
     const rates = resultData.rates || []
+    const findCol = (row: any, keywords: string[]): string => {
+      for (const k of Object.keys(row)) {
+        const kl = k.toLowerCase()
+        if (keywords.some(kw => kl.includes(kw))) return row[k] || ''
+      }
+      return ''
+    }
     const rateOptions = rates.map((row: any) => {
-      // Parse rate: "6.000%\n30 Days" or "6.000%"
-      const rateField = row['Rate\nLock\nPeriod'] || row['Rate Lock Period'] || row['Rate'] || ''
+      const rateField = findCol(row, ['rate'])
       const rateMatch = rateField.match(/([\d.]+)%/)
       const lockMatch = rateField.match(/(\d+)\s*Days/)
 
-      // Parse price: "100.948\n$5,689.20" or just "100.948"
-      const priceField = row['Price'] || ''
+      const priceField = findCol(row, ['price'])
       const priceMatch = priceField.match(/([\d.]+)/)
       const costMatch = priceField.match(/\$([\d,.]+)/)
 
-      // Parse product
-      const product = row['Product'] || ''
-
-      // Parse investor/program
-      const investorField = row['Investor/Lender Program'] || row['Investor'] || ''
-
-      // Parse payment
-      const pmtField = row['P&I PMT'] || row['Payment'] || ''
+      const product = findCol(row, ['product'])
+      const investorField = findCol(row, ['investor', 'lender'])
+      const pmtField = findCol(row, ['pmt', 'payment'])
       const pmtMatch = pmtField.match(/\$([\d,.]+)/)
 
       return {
