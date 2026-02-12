@@ -1,8 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 const BROWSERLESS_URL = 'https://production-sfo.browserless.io/chromium/bql'
-const LOANNEX_LOGIN_URL = 'https://web.loannex.com/'
-
 export const config = { maxDuration: 60 }
 
 // ================= Field Mapping =================
@@ -45,53 +43,7 @@ function mapFormToLN(body: any): Record<string, string> {
   }
 }
 
-// ================= Step 2: Login to wrapper =================
-function buildLoginScript(email: string, password: string): string {
-  return `(async function() {
-  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-  await sleep(1500);
-  var userInput = document.getElementById('UserName');
-  var passwordInput = document.getElementById('Password');
-  var loginBtn = document.getElementById('btnSubmit');
-  if (!userInput || !passwordInput) return JSON.stringify({ ok: false, error: 'no_form' });
-  function setInput(el, val) {
-    el.focus();
-    var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-    setter.call(el, val);
-    el.dispatchEvent(new Event('input', {bubbles: true}));
-    el.dispatchEvent(new Event('change', {bubbles: true}));
-  }
-  setInput(userInput, '${email}');
-  await sleep(200);
-  setInput(passwordInput, '${password}');
-  await sleep(200);
-  if (loginBtn) setTimeout(function() { loginBtn.click(); }, 150);
-  return JSON.stringify({ ok: true });
-})()`
-}
-
-// ================= Step 4: Navigate to iframe =================
-function buildNavToIframeScript(): string {
-  return `(async function() {
-  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-  await sleep(2000);
-  var iframes = document.getElementsByTagName('iframe');
-  var iframe = null;
-  for (var i = 0; i < iframes.length; i++) {
-    if (iframes[i].src && iframes[i].src.indexOf('nex-app') >= 0) { iframe = iframes[i]; break; }
-    if (iframes[i].src && iframes[i].src.indexOf('loannex') >= 0) { iframe = iframes[i]; break; }
-  }
-  if (!iframe && iframes.length > 0) iframe = iframes[0];
-  if (iframe && iframe.src && iframe.src.length > 10) {
-    window.location.href = iframe.src;
-    await sleep(500);
-    return JSON.stringify({ ok: true });
-  }
-  return JSON.stringify({ ok: false, error: 'no_iframe' });
-})()`
-}
-
-// ================= Step 5: Fill form + Get Price + Scrape =================
+// ================= Fill form + Get Price + Scrape =================
 function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: string, password: string): string {
   const mapJson = JSON.stringify(fieldMap)
   return `(async function() {
@@ -526,24 +478,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const body = req.body || {}
     const fieldMap = mapFormToLN(body)
-
-    const loginScript = buildLoginScript(loannexUser, loannexPassword)
-    const waitScript = `(async function() { await new Promise(r => setTimeout(r, 3000)); return JSON.stringify({ ok: true }); })()`
-    const navScript = buildNavToIframeScript()
     const fillScript = buildFillAndScrapeScript(fieldMap, loannexUser, loannexPassword)
 
-    // Step 6: retry fill script (runs if step 5 navigated to /nex-app after Angular login)
-    const retryWait = `(async function() { await new Promise(r => setTimeout(r, 3000)); return JSON.stringify({ ok: true }); })()`
-    const retryFillScript = buildFillAndScrapeScript(fieldMap, loannexUser, loannexPassword)
-
+    // Simple 2-step BQL: go directly to Angular app, then fill+scrape
+    // The fillScript handles Angular login if needed and Lock Desk navigation
     const bqlQuery = `mutation FillAndPrice {
-  loginPage: goto(url: "${LOANNEX_LOGIN_URL}", waitUntil: networkIdle) { status time }
-  login: evaluate(content: ${JSON.stringify(loginScript)}, timeout: 8000) { value }
-  waitForRedirect: evaluate(content: ${JSON.stringify(waitScript)}, timeout: 8000) { value }
-  navToAngular: evaluate(content: ${JSON.stringify(navScript)}, timeout: 10000) { value }
-  price: evaluate(content: ${JSON.stringify(fillScript)}, timeout: 45000) { value }
-  waitForQP: evaluate(content: ${JSON.stringify(retryWait)}, timeout: 6000) { value }
-  retryPrice: evaluate(content: ${JSON.stringify(retryFillScript)}, timeout: 25000) { value }
+  page: goto(url: "https://webapp.loannex.com/nex-app", waitUntil: networkIdle) { status time }
+  price: evaluate(content: ${JSON.stringify(fillScript)}, timeout: 55000) { value }
 }`
 
     const bqlResp = await fetch(`${BROWSERLESS_URL}?token=${browserlessToken}`, {
@@ -564,31 +505,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ success: false, error: 'BQL error', bqlErrors: (bqlResult.errors || []).map((e: any) => e.message).slice(0, 5) })
     }
 
-    // Parse results — try step 5 (price) first, fall back to step 7 (retryPrice)
+    // Parse results
     const safeParseValue = (val: any) => {
       if (!val) return null
       try { return typeof val === 'string' ? JSON.parse(val) : val } catch { return null }
     }
 
-    let priceData = safeParseValue(bqlResult.data?.price?.value)
-    const retryRaw = safeParseValue(bqlResult.data?.retryPrice?.value)
-    let usedStep = 'price'
-
-    // If step 5 indicated it navigated to Quick Pricer, use step 7 results
-    if (!priceData || priceData.needsNextStep || (priceData.rates && priceData.rates.length === 0 && priceData.diag?.steps?.includes('on_lock_desk_navigating_to_qp'))) {
-      if (retryRaw && retryRaw.rates) {
-        priceData = retryRaw
-        usedStep = 'retryPrice'
-      }
-    }
+    const priceData = safeParseValue(bqlResult.data?.price?.value)
 
     if (!priceData) {
       return res.json({
         success: false,
         error: 'No data from pricing step',
         debug: {
-          priceStep: safeParseValue(bqlResult.data?.price?.value),
-          retryStep: retryRaw,
           bqlErrors: (bqlResult.errors || []).map((e: any) => ({ msg: e.message?.substring(0, 100), path: e.path })).slice(0, 5),
           hasData: !!bqlResult.data,
           dataKeys: bqlResult.data ? Object.keys(bqlResult.data) : [],
@@ -636,10 +565,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         rateOptions,
         totalRates: rateOptions.length,
         rawRows: rates.length,
-        usedStep,
         diag: priceData.diag,
-        retryDiag: usedStep === 'price' ? (retryRaw?.diag || null) : null,
-        bqlErrors: (bqlResult.errors || []).map((e: any) => ({ msg: (e.message || '').substring(0, 80), path: e.path })).slice(0, 5),
       },
     })
   } catch (error) {
