@@ -446,9 +446,28 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
 
   await sleep(500); // settle
 
+  // Capture page content after results appear
+  var fullText = (document.body.innerText || '');
+  var gpIdx = fullText.indexOf('Get Price');
+  diag.afterGetPrice = gpIdx >= 0 ? fullText.substring(gpIdx, gpIdx + 2000) : fullText.substring(Math.max(0, fullText.length - 2000));
+
+  // Log table-like structures found
+  var allTableLike = document.querySelectorAll('table, p-table, .p-datatable, [class*=results], [class*=pricing]');
+  diag.tableLikeCount = allTableLike.length;
+  if (allTableLike.length > 0) {
+    diag.tableLike = [];
+    for (var tt = 0; tt < allTableLike.length && tt < 3; tt++) {
+      diag.tableLike.push({
+        tag: allTableLike[tt].tagName + '.' + (allTableLike[tt].className || '').substring(0, 60),
+        rows: allTableLike[tt].querySelectorAll('tr').length,
+        text: (allTableLike[tt].textContent || '').substring(0, 300)
+      });
+    }
+  }
+
   // Scrape the results table
   var rates = [];
-  var tables = document.querySelectorAll('table');
+  var tables = document.querySelectorAll('table, p-table, .p-datatable');
   for (var ti2 = 0; ti2 < tables.length; ti2++) {
     var trs = tables[ti2].querySelectorAll('tr');
     if (trs.length < 2) continue;
