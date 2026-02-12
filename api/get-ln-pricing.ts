@@ -251,24 +251,38 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
     return null;
   }
 
-  // Set PrimeNG dropdown value
+  // Set PrimeNG Autocomplete value by typing + selecting suggestion
   async function setDropdown(labelText, optionText) {
     var field = findFieldInput(labelText);
     if (!field) { diag.fills.push(labelText + ': NOT_FOUND'); return false; }
 
-    var dropdownEl = field.el;
-    diag.fills.push(labelText + ': clicking ' + dropdownEl.tagName + '.' + (dropdownEl.className || '').substring(0, 40));
+    var input = field.el;
+    if (input.tagName !== 'INPUT') {
+      input = field.el.querySelector ? field.el.querySelector('input') || field.el : field.el;
+    }
 
-    // Click the element to open dropdown/popover
-    dropdownEl.click();
-    await sleep(500);
+    // Clear the input first
+    input.focus();
+    input.dispatchEvent(new Event('focus', {bubbles: true}));
+    await sleep(100);
 
-    // Search for ANY visible overlay panel (PrimeNG uses many panel types)
+    // Clear existing value
+    var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    if (setter) setter.call(input, '');
+    input.dispatchEvent(new Event('input', {bubbles: true}));
+    await sleep(100);
+
+    // Type the search text to trigger autocomplete suggestions
+    if (setter) setter.call(input, optionText);
+    input.dispatchEvent(new Event('input', {bubbles: true}));
+    await sleep(600);
+
+    // Find the autocomplete suggestion panel
     function findPanel() {
       var selectors = [
-        '.p-dropdown-panel', '.p-select-overlay', '.p-popover-content',
-        '.p-overlay-panel', '.p-listbox', '[class*=dropdown-panel]',
-        '[class*=select-overlay]', '[class*=popover]'
+        '.p-autocomplete-panel', '.p-autocomplete-overlay',
+        '.p-overlay-panel', '[class*=autocomplete-panel]',
+        '.p-popover-content', '[role=listbox]'
       ];
       for (var si = 0; si < selectors.length; si++) {
         var matches = document.querySelectorAll(selectors[si]);
@@ -276,35 +290,36 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
           if (matches[mi].offsetHeight > 0 && matches[mi].offsetWidth > 0) return matches[mi];
         }
       }
-      // Check for any recently-appeared overlay with list items
-      var allOverlays = document.querySelectorAll('[role=listbox], [role=menu], ul.p-listbox-list');
-      for (var ai = 0; ai < allOverlays.length; ai++) {
-        if (allOverlays[ai].offsetHeight > 0) return allOverlays[ai];
-      }
       return null;
     }
 
     var panel = findPanel();
 
     if (!panel) {
-      // Try clicking the container or a trigger icon
-      var container = field.container;
-      var trigger = container.querySelector('[class*=trigger], [class*=chevron], .p-icon');
-      if (trigger) { trigger.click(); await sleep(500); panel = findPanel(); }
-    }
-
-    if (!panel) {
-      // Try focus + ArrowDown to open
-      dropdownEl.focus();
-      dropdownEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
-      await sleep(500);
+      // Try clicking the input to open suggestions
+      input.click();
+      await sleep(400);
       panel = findPanel();
     }
 
-    if (!panel) { diag.fills.push(labelText + ': NO_PANEL'); return false; }
+    if (!panel) {
+      // Fallback: press ArrowDown to open suggestions
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+      await sleep(400);
+      panel = findPanel();
+    }
 
-    // Find matching option
-    var items = panel.querySelectorAll('li, .p-dropdown-item, [class*=dropdown-item]');
+    if (!panel) {
+      diag.fills.push(labelText + ': NO_PANEL (typed: ' + optionText + ')');
+      // Try pressing Enter to force-select the typed value
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      input.dispatchEvent(new Event('change', {bubbles: true}));
+      input.dispatchEvent(new Event('blur', {bubbles: true}));
+      return false;
+    }
+
+    // Find and click matching suggestion
+    var items = panel.querySelectorAll('li, .p-autocomplete-item, [class*=autocomplete-item], [class*=option]');
     var matched = false;
     for (var oi = 0; oi < items.length; oi++) {
       var itemText = (items[oi].textContent || '').trim();
@@ -317,7 +332,7 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
     }
 
     if (!matched) {
-      // Try partial match (case insensitive)
+      // Case-insensitive partial match
       var lower = optionText.toLowerCase();
       for (var oi2 = 0; oi2 < items.length; oi2++) {
         if ((items[oi2].textContent || '').trim().toLowerCase().indexOf(lower) >= 0) {
@@ -330,11 +345,12 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
     }
 
     if (!matched) {
-      // Close panel by pressing Escape
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
       var optTexts = [];
       for (var x = 0; x < items.length && x < 10; x++) optTexts.push((items[x].textContent || '').trim());
       diag.fills.push(labelText + ': NO_MATCH(' + optionText + ') avail=[' + optTexts.join(',') + ']');
+      // Close panel and try Enter to force-select
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
       return false;
     }
 
