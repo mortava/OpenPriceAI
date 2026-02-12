@@ -33,6 +33,11 @@ function mapFormToLN(body: any): Record<string, string> {
     nonqm: 'First Lien', conventional: 'First Lien', fha: 'First Lien', va: 'First Lien',
   }
 
+  const dscrVal = isDSCR ? String(body.dscrRatio || '1.250').replace('>=', '') : ''
+  const rentalVal = isDSCR ? String(body.grossRentalIncome || '5000') : ''
+  const ppVal = isInvestment ? '5 Year' : 'None'
+  const finProps = isInvestment ? '1' : ''
+
   return {
     'Loan Type': loanTypeMap[body.loanType] || 'Non-QM',
     'Purpose': purposeMap[body.loanPurpose] || 'Purchase',
@@ -47,12 +52,12 @@ function mapFormToLN(body: any): Record<string, string> {
     'FICO': creditScore,
     'DTI': String(body.dti || ''),
     'Escrows': body.impoundType === '3' ? 'No' : 'Yes',
-    // DSCR/Investment-specific fields
-    'DSCR': isDSCR ? String(body.dscrRatio || '1.250').replace('>=', '') : '',
-    'Mo. Rental Income': isDSCR ? String(body.grossRentalIncome || '5000') : '',
-    'Prepay Penalty': isInvestment ? '5 Year' : 'None',
-    'Months Reserves': '12',
-    '# of Financed Properties': isInvestment ? '1' : '',
+    // DSCR/Investment fields — include label variants
+    'DSCR': dscrVal, 'DSCR Ratio': dscrVal, 'DSCR %': dscrVal,
+    'Mo. Rental Income': rentalVal, 'Monthly Rental Income': rentalVal, 'Gross Rental Income': rentalVal,
+    'Prepay Penalty': ppVal, 'Prepayment Penalty': ppVal,
+    'Months Reserves': '12', 'Reserves': '12',
+    '# of Financed Properties': finProps, 'Number of Financed Properties': finProps, 'Financed Properties': finProps,
   }
 }
 
@@ -404,8 +409,8 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
     return true;
   }
 
-  // Fill dropdown fields
-  var dropdowns = ['Loan Type', 'Purpose', 'Occupancy', 'Property Type', 'Income Doc', 'Citizenship', 'State', 'Escrows', 'Prepay Penalty'];
+  // Fill dropdown fields (order matters — Income Doc triggers dynamic fields)
+  var dropdowns = ['Loan Type', 'Purpose', 'Occupancy', 'Property Type', 'Income Doc'];
   for (var di = 0; di < dropdowns.length; di++) {
     var key = dropdowns[di];
     if (fieldMap[key]) {
@@ -414,8 +419,35 @@ function buildFillAndScrapeScript(fieldMap: Record<string, string>, email: strin
     }
   }
 
-  // Fill numeric fields
-  var numerics = ['Appraised Value', 'Purchase Price', 'First Lien Amount', 'FICO', 'DTI', 'DSCR', 'Mo. Rental Income', 'Months Reserves', '# of Financed Properties'];
+  // Wait for Angular to re-render dynamic fields based on Income Doc selection
+  await sleep(1500);
+
+  // Dump all visible field labels for discovery
+  var allNexFields = document.querySelectorAll('.nex-app-field');
+  var allLabels = [];
+  for (var lfi = 0; lfi < allNexFields.length; lfi++) {
+    var lbl = allNexFields[lfi].querySelector('label');
+    if (lbl) allLabels.push((lbl.textContent || '').trim());
+  }
+  diag.allFieldLabels = allLabels;
+  diag.steps.push('post_incomedoc_fields: ' + allLabels.length);
+
+  // Fill remaining dropdowns (these may include dynamic DSCR fields)
+  var dropdowns2 = ['Citizenship', 'State', 'Escrows', 'Prepay Penalty', 'Prepayment Penalty'];
+  for (var di2 = 0; di2 < dropdowns2.length; di2++) {
+    var key2 = dropdowns2[di2];
+    if (fieldMap[key2]) {
+      await setDropdown(key2, fieldMap[key2]);
+      await sleep(200);
+    }
+  }
+
+  // Fill numeric fields (try multiple label variants for DSCR fields)
+  var numerics = ['Appraised Value', 'Purchase Price', 'First Lien Amount', 'FICO', 'DTI',
+    'DSCR', 'DSCR Ratio', 'DSCR %',
+    'Mo. Rental Income', 'Monthly Rental Income', 'Gross Rental Income',
+    'Months Reserves', 'Reserves',
+    '# of Financed Properties', 'Number of Financed Properties', 'Financed Properties'];
   for (var ni = 0; ni < numerics.length; ni++) {
     var nkey = numerics[ni];
     if (fieldMap[nkey]) {
